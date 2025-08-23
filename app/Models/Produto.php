@@ -1,0 +1,97 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use App\Models\Configuracao;
+
+class Produto extends Model
+{
+    use HasFactory;
+
+    protected $table = 'produtos';
+
+    /**
+     * Atributos que podem ser preenchidos em massa.
+     */
+    protected $fillable = [
+        'nome',
+        'preco_venda',
+        'ativo',
+        'preco_custo',    // ADICIONADO
+        'categoria_id',   // ADICIONADO
+        'margem_lucro',   // ADICIONADO
+        // Os campos 'detalhe_id' e 'detalhe_type' são preenchidos automaticamente.
+    ];
+
+    /**
+     * Atributos que devem ter seu tipo convertido.
+     */
+    protected $casts = [
+        'preco_venda' => 'decimal:2',
+        'ativo' => 'boolean',
+        'preco_custo' => 'decimal:2',    // ADICIONADO
+        'margem_lucro' => 'decimal:2',   // ADICIONADO
+    ];
+
+
+    // --- RELACIONAMENTOS ---
+
+    /**
+     * Pega o modelo de detalhe associado (DetalheItemMercado, DetalheServicoOficina, etc).
+     */
+    public function detalhe()
+    {
+        return $this->morphTo();
+    }
+
+    /**
+     * Um produto TEM UM conjunto de dados fiscais.
+     */
+    public function dadoFiscal()
+    {
+        return $this->hasOne(DadoFiscalProduto::class);
+    }
+
+    /**
+     * ADICIONADO: Um produto PERTENCE A UMA Categoria.
+     */
+    public function categoria()
+    {
+        return $this->belongsTo(Categoria::class);
+    }
+
+
+    // --- LÓGICA DE NEGÓCIO ---
+
+    /**
+     * ADICIONADO: Calcula o preço de venda com base no custo e na hierarquia de margens.
+     *
+     * @param float $precoCusto O preço de custo do produto.
+     * @return float O preço de venda calculado.
+     */
+    public function calcularPrecoVenda(float $precoCusto): float
+    {
+        $margem = 0;
+
+        // 1. Verifica a margem do próprio produto
+        if ($this->margem_lucro !== null) {
+            $margem = $this->margem_lucro;
+        }
+        // 2. Se não houver, verifica a margem da categoria
+        elseif ($this->categoria && $this->categoria->margem_lucro !== null) {
+            $margem = $this->categoria->margem_lucro;
+        }
+        // 3. Se não houver, busca a margem padrão do banco de dados
+        else {
+            $margem = Configuracao::where('chave', 'margem_lucro_padrao')->first()->valor ?? 100.00;
+        }
+
+        // Fórmula: Preço de Venda = Custo * (1 + (Margem / 100))
+        $precoVenda = $precoCusto * (1 + ($margem / 100));
+
+        // Arredonda para 2 casas decimais
+        return round($precoVenda, 2);
+    }
+}
