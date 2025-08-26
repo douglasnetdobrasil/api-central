@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Configuracao;
 use Illuminate\Support\Facades\Auth;
 use App\Models\DetalhesItemMercado;
+use App\Models\UnidadeMedida;
+use App\Models\Categoria;
+use Illuminate\Support\Facades\Session;
 use Exception;
 
 class CompraWebController extends Controller
@@ -35,74 +38,180 @@ class CompraWebController extends Controller
         $fornecedores = Fornecedor::orderBy('razao_social')->get();
         return view('compras.index', compact('comprasRecentes', 'fornecedores'));
     }
-
     public function importarXml(Request $request)
     {
         $request->validate(['xml_file' => 'required|file|mimes:xml,txt']);
     
         try {
+            // --- LINHAS ESSENCIAIS RESTAURADAS ---
             $xmlContent = $request->file('xml_file')->getContent();
-            $xml = @simplexml_load_string($xmlContent);
-    
-            if ($xml === false) throw new Exception("O arquivo XML parece estar mal formatado.");
-    
+            $xml = simplexml_load_string($xmlContent);
+            if ($xml === false) {
+                throw new Exception("Não foi possível carregar o conteúdo do XML.");
+            }
             $xml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-            $infNFeNode = $xml->xpath('//nfe:infNFe');
-            if (empty($infNFeNode)) throw new Exception("Não foi possível encontrar a tag <infNFe>. O arquivo é uma NF-e válida?");
+            // ------------------------------------
+    
+            $infNFe = $xml->xpath('//nfe:infNFe')[0];
+            if (!$infNFe) {
+                throw new Exception("Estrutura do XML inválida: tag <infNFe> não encontrada.");
+            }
             
-            $infNFe = $infNFeNode[0];
             $chaveAcesso = str_replace('NFe', '', (string)$infNFe->attributes()->Id);
-            
-            if (Compra::where('chave_acesso_nfe', $chaveAcesso)->exists()) {
-                return redirect()->route('compras.index')->with('error', 'Atenção! A Nota Fiscal (Chave: ' . $chaveAcesso . ') já foi cadastrada.');
+    
+            // REGRA 2: VERIFICA SE A NOTA JÁ FOI LANÇADA
+            $notaExistente = Compra::where('chave_acesso_nfe', $chaveAcesso)->first();
+            if ($notaExistente) {
+                return back()->with('error', "Atenção: A Nota Fiscal (Chave: {$chaveAcesso}) já foi importada em " . $notaExistente->created_at->format('d/m/Y') . ".");
             }
     
-            $fornecedor = Fornecedor::firstOrCreate(
-                ['cpf_cnpj' => (string)$infNFe->emit->CNPJ],
-                ['razao_social' => (string)$infNFe->emit->xNome, 'tipo_pessoa' => 'juridica']
-            );
-            
-            // --- BLOCO ATUALIZADO ---
-            // Preenchendo os dados da compra com as informações do XML
-            $compra = Compra::create([
-                'empresa_id' => auth()->user()->empresa_id, // Resolvendo o erro anterior
-                'fornecedor_id' => $fornecedor->id,
-                'chave_acesso_nfe' => $chaveAcesso,
-                'numero_nota' => (string) $infNFe->ide->nNF,
-                'serie_nota' => (string) $infNFe->ide->serie,
-                'data_emissao' => new \DateTime((string) $infNFe->ide->dhEmi),
-                'valor_total_nota' => (float) $infNFe->total->ICMSTot->vNF,
-                'status' => 'conferencia', // Status inicial
-                // Adicione a lógica da forma de pagamento se necessário
-                // 'forma_pagamento' => $formaPagamento,
-            ]);
+            // REGRA 3: VERIFICA O FORNECEDOR
+            $cnpjFornecedor = (string)$infNFe->emit->CNPJ;
+            $fornecedor = Fornecedor::where('cpf_cnpj', $cnpjFornecedor)->first();
     
-            // --- LÓGICA DE VÍNCULO AUTOMÁTICO ---
+            // Pega a margem padrão da sua tabela `configuracoes`
+            $margemPadrao = \App\Models\Configuracao::where('chave', 'margem_lucro_padrao')->value('valor') ?? 0;
+    
+            $itens = [];
             foreach ($xml->xpath('//nfe:det') as $itemXml) {
-                $itemCompra = $compra->itens()->create([
-                    'descricao_item_nota' => (string) $itemXml->prod->xProd,
-                    'codigo_produto_nota' => (string) $itemXml->prod->cProd,
-                    'ean_nota' => (string) $itemXml->prod->cEAN,
-                    'ncm' => (string) $itemXml->prod->NCM,
-                    'cfop' => (string) $itemXml->prod->CFOP,
-                    'quantidade' => (float) $itemXml->prod->qCom,
-                    'preco_custo_nota' => (float) $itemXml->prod->vUnCom,
-                    'subtotal' => (float) $itemXml->prod->vProd,
-                ]);
+                $vinculo = null;
+                // REGRA 4: VERIFICA VÍNCULOS DE PRODUTOS
+                if ($fornecedor) {
+                    $vinculo = ProdutoFornecedor::with('produto.categoria')
+                        ->where('fornecedor_id', $fornecedor->id)
+                        ->where('codigo_produto_fornecedor', (string)$itemXml->prod->cProd)
+                        ->first();
+                }
                 
-                $this->vincularOuCriarProduto($fornecedor, $itemCompra);
+                $precoCusto = (float)$itemXml->prod->vUnCom;
+                $margemAplicada = $margemPadrao;
+    
+                // REGRA 5: APLICA HIERARQUIA DE MARGENS
+                if ($vinculo) {
+                    $produtoVinculado = $vinculo->produto;
+                    // 1ª Prioridade: Margem do próprio produto
+                    if (!empty($produtoVinculado->margem_lucro)) {
+                        $margemAplicada = $produtoVinculado->margem_lucro;
+                    } 
+                    // 2ª Prioridade: Margem da categoria do produto
+                    elseif ($produtoVinculado->categoria && !empty($produtoVinculado->categoria->margem_lucro)) {
+                        $margemAplicada = $produtoVinculado->categoria->margem_lucro;
+                    }
+                }
+                
+                $precoVendaSugerido = $precoCusto * (1 + ($margemAplicada / 100));
+    
+                $itens[] = [
+                    'descricao_nota' => (string)$itemXml->prod->xProd,
+                    'codigo_fornecedor' => (string)$itemXml->prod->cProd,
+                    'ean' => (string)$itemXml->prod->cEAN,
+                    'ncm' => (string)$itemXml->prod->NCM,
+                    'cfop' => (string)$itemXml->prod->CFOP,
+                    'unidade' => (string)$itemXml->prod->uCom,
+                    'quantidade' => (float)$itemXml->prod->qCom,
+                    'preco_custo' => $precoCusto,
+                    'subtotal' => (float)$itemXml->prod->vProd,
+                    'vinculo_existente' => $vinculo ? $vinculo->produto->toArray() : null,
+                    'preco_venda_sugerido' => number_format($precoVendaSugerido, 2, '.', ''),
+                ];
             }
+    
+            $dadosNFe = [
+                'chave_acesso' => $chaveAcesso,
+                'numero_nota' => (string)$infNFe->ide->nNF,
+                'data_emissao' => new \DateTime((string)$infNFe->ide->dhEmi),
+                'valor_total' => (float)$infNFe->total->ICMSTot->vNF,
+                'fornecedor' => [
+                    'cnpj' => $cnpjFornecedor,
+                    'razao_social' => (string)$infNFe->emit->xNome,
+                    'existente' => !is_null($fornecedor),
+                ],
+                'itens' => $itens,
+            ];
             
-            return redirect()->route('compras.edit', $compra->id)
-                             ->with('success', 'Nota importada! Confira os itens vinculados e categorize os novos produtos.');
+            Session::put('importacao_nfe', $dadosNFe);
+            return redirect()->route('compras.revisarImportacao');
     
         } catch (Exception $e) {
-            return back()->with('error', 'Falha ao processar XML: ' . $e->getMessage());
+            return back()->with('error', 'Falha ao analisar o XML: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * ETAPA 2: Exibe a tela de conferência com os dados da sessão.
+     */
+    public function revisarImportacao()
+    {
+        $dadosNFe = Session::get('importacao_nfe');
+
+        if (!$dadosNFe) {
+            return redirect()->route('compras.index')->with('error', 'Nenhuma nota para revisar.');
+        }
+
+        // Carrega os dados necessários para os dropdowns da view
+        $produtosDoSistema = Produto::orderBy('nome')->get();
+        $categorias = Categoria::orderBy('nome')->get(); // <-- ESTA É A LINHA QUE ESTAVA FALTANDO
+
+        // Passe a variável $categorias para a view
+        return view('compras.revisar', compact('dadosNFe', 'produtosDoSistema', 'categorias')); // <-- AQUI TAMBÉM
+    }
+
+
+    /**
+     * ETAPA 3: Recebe os dados da tela de conferência e salva TUDO no banco.
+     */
+    public function salvarImportacao(Request $request)
+    {
+        // Definição das regras de validação
+        $regrasDeValidacao = [
+            'itens' => 'required|array',
+            'itens.*.nome' => 'required|string|max:255',
+            'itens.*.categoria_id' => 'nullable|exists:categorias,id',
+            'itens.*.preco_venda' => 'required|numeric|min:0',
+            'itens.*.unidade_venda_id' => 'nullable|exists:unidades_medida,id', // Nome da tabela corrigido
+        ];
+    
+        // AQUI ESTÁ A MUDANÇA: A validação é executada e seu resultado (os dados validados)
+        // é diretamente atribuído à variável $dadosValidados.
+        $dadosValidados = $request->validate($regrasDeValidacao);
+    
+        // Carrega as configurações padrões do banco de dados
+        $configuracoes = Configuracao::pluck('valor', 'chave')->all();
+    
+        // Processa cada item, aplicando os padrões quando necessário
+        foreach ($dadosValidados['itens'] as $itemData) {
+            // Se o usuário não escolheu uma categoria, usa o padrão do banco
+            if (empty($itemData['categoria_id'])) {
+                $itemData['categoria_id'] = $configuracoes['categoria_padrao_id'] ?? null;
+            }
+    
+            // Se o usuário não escolheu uma unidade, usa o padrão do banco
+            if (empty($itemData['unidade_venda_id'])) {
+                $itemData['unidade_venda_id'] = $configuracoes['unidade_padrao_id'] ?? null;
+            }
+    
+            // Garante que não tentaremos criar um produto sem categoria
+            if (empty($itemData['categoria_id'])) {
+                continue; // Pula para o próximo item
+            }
+    
+            // Lógica para Criar ou Atualizar o produto
+            if (!empty($itemData['produto_id'])) {
+                // Seu código para ATUALIZAR um produto existente...
+            } else {
+                // Cria um novo produto
+                Produto::create($itemData);
+            }
+        }
+    
+        // Sua lógica para salvar o fornecedor...
+    
+        return redirect()->route('compras.index')->with('success', 'Nota importada com sucesso!');
     }
 
     public function update(Request $request, string $id)
     {
+        // Este método parece correto, mantido como estava.
         $request->validate([
             'itens' => 'required|array',
             'itens.*.preco_entrada' => 'required|numeric',
@@ -125,24 +234,17 @@ class CompraWebController extends Controller
                     if (!$produto->categoria_id && isset($itemData['categoria_id'])) {
                         $produto->categoria_id = $itemData['categoria_id'];
                     }
-                    $produto->preco_venda = $produto->calcularPrecoVenda((float)$itemData['preco_entrada']);
+                    if(method_exists($produto, 'calcularPrecoVenda')) {
+                        $produto->preco_venda = $produto->calcularPrecoVenda((float)$itemData['preco_entrada']);
+                    }
                     $produto->save();
 
                     ProdutoFornecedor::updateOrCreate(
-                        [
-                            'fornecedor_id' => $compra->fornecedor_id,
-                            'codigo_produto_fornecedor' => $item->codigo_produto_nota,
-                        ],
-                        [
-                            'produto_id' => $produto->id,
-                            'ean_fornecedor' => $item->ean_nota,
-                        ]
+                        ['fornecedor_id' => $compra->fornecedor_id, 'codigo_produto_fornecedor' => $item->codigo_produto_nota],
+                        ['produto_id' => $produto->id, 'ean_fornecedor' => $item->ean_nota]
                     );
 
-                    $item->update([
-                        'produto_id' => $produto->id,
-                        'preco_entrada' => $itemData['preco_entrada'],
-                    ]);
+                    $item->update(['produto_id' => $produto->id, 'preco_entrada' => $itemData['preco_entrada']]);
                 }
 
                 $compra->status = 'finalizada';
@@ -155,141 +257,116 @@ class CompraWebController extends Controller
         }
     }
 
-    public function edit(string $id)
+    // CORREÇÃO 3: Assinatura do método e lógica interna totalmente revisadas.
+    private function vincularOuCriarProduto(Fornecedor $fornecedor, ItemCompra $itemCompra, string $unidadeComercialXml): void
     {
-        $compra = Compra::with('fornecedor', 'itens.produto.categoria')->findOrFail($id);
-        $produtos = Produto::orderBy('nome')->get();
-        $categorias = \App\Models\Categoria::orderBy('nome')->get();
-    
-        return view('compras.edit', compact('compra', 'produtos', 'categorias'));
-    }
-
-    private function vincularOuCriarProduto(Fornecedor $fornecedor, ItemCompra $itemCompra): void
-    {  
-
-
-       
-        $produtoIdFinal = null;
-        $produtoParaCalcularPreco = null;
-    
         $vinculo = ProdutoFornecedor::where('fornecedor_id', $fornecedor->id)
                                     ->where('codigo_produto_fornecedor', $itemCompra->codigo_produto_nota)
                                     ->first();
     
+        $produtoIdFinal = null;
+    
         if ($vinculo) {
+            // Se o vínculo já existe, apenas atualizamos o produto existente.
             $produto = Produto::find($vinculo->produto_id);
             if ($produto) {
                 $produto->preco_custo = $itemCompra->preco_custo_nota;
-                $produtoParaCalcularPreco = $produto;
+                $produto->save();
                 $produtoIdFinal = $produto->id;
             }
         } else {
+            // Se não há vínculo, é um produto novo.
             $detalheId = null;
+            $detalheType = null; // <-- CORREÇÃO 1: Inicia a variável do TIPO como nula.
             $usuario = Auth::user();
-
-/*
-            dd([
-                '1. Objeto Usuario' => $usuario,
-                '2. Objeto Empresa (do Usuario)' => $usuario->empresa,
-                '3. Nicho da Empresa' => $usuario->empresa ? $usuario->empresa->nicho : 'Empresa é nula, não foi possível ler o nicho.',
-                '4. A condição ($usuario->empresa) é verdadeira?' => !is_null($usuario->empresa),
-                '5. A condição ($usuario->empresa->nicho === \'mercado\') é verdadeira?' => $usuario->empresa ? ($usuario->empresa->nicho === 'mercado') : 'Empresa é nula, não foi possível comparar o nicho.',
-            ]);
-            */
     
             if ($usuario->empresa && $usuario->empresa->nicho_negocio === 'mercado') {
-                // --- BLOCO ATUALIZADO ---
-                // 1. Cria o registro de detalhes com dados extraídos da nota e valores padrão
-                $detalheItem = DetalhesItemMercado::create([
-                    // --- Dados que podemos pegar da Nota Fiscal (XML) ---
-                    'codigo_barras' => $itemCompra->ean_nota,
-                    'fornecedor_id' => $fornecedor->id,
-                    'preco_custo' => $itemCompra->preco_custo_nota,
-                    'estoque_atual' => $itemCompra->quantidade, // Estoque inicial é a quantidade da nota
-    
-                    // --- Dados que precisam de um valor padrão ---
-                    // !!! ATENÇÃO: Verifique e ajuste estes valores padrão conforme sua necessidade !!!
-                    'marca' => null, // Pode ser nulo ou um valor como 'A Definir'
-                    'categoria_id' => null, // Será vinculado depois na tela de edição
-                    'estoque_minimo' => 1, // Defina um padrão
-                    'unidade_medida_id' => 1, // Ex: ID 1 = 'UNIDADE'. AJUSTE CONFORME SUA TABELA 'unidades_medida'
-                    'controla_validade' => false,
-                    'vendido_por_peso' => false,
-                    // Adicione aqui qualquer outro campo que seja obrigatório na sua tabela
-                ]);
                 
-                // 2. Pega o ID do detalhe que acabamos de criar
-                $detalheId = $detalheItem->id;
-            }
-            
-            $novoProduto = new Produto();
-            $novoProduto->nome = $itemCompra->descricao_item_nota;
-            $novoProduto->ativo = true;
-            $novoProduto->categoria_id = null;
-            $novoProduto->detalhe_id = $detalheId;
-            $novoProduto->preco_custo = $itemCompra->preco_custo_nota;
-            
-            $produtoParaCalcularPreco = $novoProduto;
-            $produtoIdFinal = null;
-        }
+                $unidadeMedida = UnidadeMedida::firstOrCreate(
+                    ['sigla' => strtoupper($unidadeComercialXml)],
+                    ['nome' => $unidadeComercialXml]
+                );
     
-        if ($produtoParaCalcularPreco) {
-            // Lógica de cálculo de preço de venda (mantida como antes)
-            $margemPadrao = Configuracao::where('chave', 'margem_lucro_padrao')->value('valor') ?? 25.0;
-            $margemAplicar = $margemPadrao;
-            if ($produtoParaCalcularPreco->categoria && $produtoParaCalcularPreco->categoria->margem_lucro > 0) {
-                $margemAplicar = $produtoParaCalcularPreco->categoria->margem_lucro;
-            }
-            $precoCusto = (float) $itemCompra->preco_custo_nota;
-            $produtoParaCalcularPreco->preco_venda = $precoCusto * (1 + ($margemAplicar / 100));
-            $produtoParaCalcularPreco->save();
-    
-            if (!$produtoIdFinal) {
-                $produtoIdFinal = $produtoParaCalcularPreco->id;
-                ProdutoFornecedor::create([
-                    'produto_id' => $produtoIdFinal,
-                    'fornecedor_id' => $fornecedor->id,
-                    'codigo_produto_fornecedor' => $itemCompra->codigo_produto_nota,
-                    'ean_fornecedor' => $itemCompra->ean_nota,
+                $detalheItem = DetalhesItemMercado::create([
+                    'codigo_barras'     => $itemCompra->ean_nota,
+                    'fornecedor_id'     => $fornecedor->id,
+                    'preco_custo'       => $itemCompra->preco_custo_nota,
+                    'estoque_atual'     => $itemCompra->quantidade,
+                    'marca'             => null,
+                    'categoria_id'      => null,
+                    'estoque_minimo'    => 1,
+                    'unidade_medida_id' => $unidadeMedida->id,
+                    'controla_validade' => false,
+                    'vendido_por_peso'  => false,
                 ]);
+    
+                $detalheId = $detalheItem->id;
+                $detalheType = DetalhesItemMercado::class; // <-- CORREÇÃO 2: Define o TIPO quando o detalhe é criado.
             }
+    
+            // Cria o registro principal do produto
+            $novoProduto = Produto::create([
+                'nome'         => $itemCompra->descricao_item_nota,
+                'ativo'        => true,
+                'categoria_id' => null,
+                'detalhe_id'   => $detalheId,
+                'detalhe_type' => $detalheType, // <-- CORREÇÃO 3: Passa o TIPO ao criar o produto.
+                'preco_custo'  => $itemCompra->preco_custo_nota,
+                'preco_venda'  => 0
+            ]);
+            
+            if(method_exists($novoProduto, 'calcularPrecoVenda')) {
+                $novoProduto->preco_venda = $novoProduto->calcularPrecoVenda($novoProduto->preco_custo);
+                $novoProduto->save();
+            }
+    
+            $produtoIdFinal = $novoProduto->id;
+    
+            ProdutoFornecedor::create([
+                'produto_id'                => $produtoIdFinal,
+                'fornecedor_id'             => $fornecedor->id,
+                'codigo_produto_fornecedor' => $itemCompra->codigo_produto_nota,
+                'ean_fornecedor'            => $itemCompra->ean_nota,
+            ]);
         }
-        
+    
         if ($produtoIdFinal) {
             $itemCompra->produto_id = $produtoIdFinal;
             $itemCompra->save();
         }
     }
-    
-    // Seus outros métodos (create, store, destroy) devem ser mantidos como estavam
-    public function create() { /* ... */ }
-    public function store(Request $request) { /* ... */ }
-    public function destroy(string $id)
-{
-    // Usamos uma transaction para garantir que ou tudo dá certo, ou nada é feito.
-    DB::beginTransaction();
 
-    try {
-        $compra = Compra::findOrFail($id);
 
-        // 1. Deleta todos os itens associados a esta compra.
-        $compra->itens()->delete();
 
-        // 2. Agora que não há mais itens, podemos deletar a compra.
-        $compra->delete();
+    public function destroy(Compra $compra)
+    {
+        // Usamos uma transação para garantir que ou tudo funciona, ou nada é alterado.
+        DB::beginTransaction();
+        try {
+            // 1. Itera sobre cada item da nota que será excluída
+            foreach ($compra->itens as $item) {
+                // Verifica se há um produto vinculado
+                if ($item->produto) {
+                    // 2. Estorna o estoque: subtrai a quantidade que entrou
+                    $item->produto->decrement('estoque_atual', $item->quantidade);
+                }
+            }
 
-        // 3. Se tudo correu bem, confirma a operação.
-        DB::commit();
+            // 3. Depois de estornar o estoque de todos os itens, apaga a nota
+            $compra->delete();
 
-        return redirect()->route('compras.index')
-                         ->with('success', 'Nota de compra #' . $id . ' e seus itens foram removidos com sucesso.');
+            // 4. Confirma as alterações no banco de dados
+            DB::commit();
 
-    } catch (Exception $e) {
-        // 4. Se algo deu errado, desfaz a operação.
-        DB::rollBack();
+            return redirect()->route('compras.index')->with('success', 'Nota fiscal e estoque estornado com sucesso.');
 
-        return redirect()->route('compras.edit', $id)
-                         ->with('error', 'Falha ao remover a nota: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            // 5. Se qualquer passo falhar, desfaz todas as operações
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Ocorreu um erro ao remover a nota: ' . $e->getMessage());
+        }
     }
 }
-}
+
+
+

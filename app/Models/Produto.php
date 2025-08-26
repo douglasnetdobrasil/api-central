@@ -19,10 +19,10 @@ class Produto extends Model
         'nome',
         'preco_venda',
         'ativo',
-        'preco_custo',    // ADICIONADO
-        'categoria_id',   // ADICIONADO
-        'margem_lucro',   // ADICIONADO
-        // Os campos 'detalhe_id' e 'detalhe_type' são preenchidos automaticamente.
+        'detalhe_id',
+        'detalhe_type', // <-- ESTA É A LINHA CRUCIAL QUE FALTAVA
+        'preco_custo',
+        'categoria_id',
     ];
 
     /**

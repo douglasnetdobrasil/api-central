@@ -8,14 +8,24 @@ use Illuminate\Database\Eloquent\Model;
 class UnidadeMedida extends Model
 {
     use HasFactory;
-    
+
+    /**
+     * O nome da tabela associada ao model.
+     * @var string
+     */
     protected $table = 'unidades_medida';
-    public $timestamps = false; // A tabela não tem `criado_em` e `atualizado_em`
 
-    protected $fillable = ['nome', 'sigla'];
+    /**
+     * Indica se o modelo deve ter timestamps (created_at, updated_at).
+     * @var bool
+     */
+    public $timestamps = false;
 
-    public function produtos()
-    {
-        return $this->hasMany(Produto::class);
-    }
+    /**
+     * Os atributos que podem ser preenchidos em massa.
+     */
+    protected $fillable = [
+        'nome',
+        'sigla', // A sigla que vem do XML (ex: 'UN', 'KG', 'CX')
+    ];
 }

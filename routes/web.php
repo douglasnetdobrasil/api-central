@@ -20,7 +20,18 @@ Route::middleware('auth')->group(function () {
     Route::resource('compras', CompraWebController::class); 
     Route::post('/compras/importar-xml', [CompraWebController::class, 'importarXml'])->name('compras.importarXml'); 
    
-    // Rota para o CRUD de Categorias
+
+// NOVA ROTA: para exibir a tela de conferência
+Route::get('/compras/importacao/revisar', [CompraWebController::class, 'revisarImportacao'])->name('compras.revisarImportacao');
+
+// NOVA ROTA: para o salvamento final
+Route::post('/compras/importacao/salvar', [CompraWebController::class, 'salvarImportacao'])->name('compras.salvarImportacao');
+
+//NOVA ROTA: PARA DELETAR
+Route::delete('/compras/{compra}', [CompraWebController::class, 'destroy'])->name('compras.destroy');
+  
+
+// Rota para o CRUD de Categorias
     Route::resource('categorias', CategoriaController::class);
 });
 
