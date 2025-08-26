@@ -33,6 +33,12 @@ Route::delete('/compras/{compra}', [CompraWebController::class, 'destroy'])->nam
 
 // Rota para o CRUD de Categorias
     Route::resource('categorias', CategoriaController::class);
+
+    Route::resource('produtos', App\Http\Controllers\ProdutoController::class);
+
+    Route::resource('fornecedores', App\Http\Controllers\FornecedorController::class);
+
+    Route::resource('clientes', App\Http\Controllers\ClienteController::class);
 });
 
 require __DIR__.'/auth.php';

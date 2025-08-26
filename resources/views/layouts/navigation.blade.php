@@ -37,6 +37,10 @@
                 <x-dropdown-link :href="route('fornecedores.index')">
                     {{ __('Fornecedores') }}
                 </x-dropdown-link>
+
+                <x-dropdown-link :href="route('clientes.index')">
+                    {{ __('Clientes') }}
+                </x-dropdown-link>
                 <x-dropdown-link :href="route('compras.index')"> {{-- Pode apontar para index por enquanto --}}
                  {{ __('Entrada de Notas') }}
                 </x-dropdown-link>

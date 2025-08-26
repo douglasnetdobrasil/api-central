@@ -16,8 +16,14 @@ class Cliente extends Model
         'cpf_cnpj',
         'email',
         'telefone',
-        'data_nascimento',
-        'endereco_completo',
+        // Adicione os novos campos
+        'cep',
+        'logradouro',
+        'numero',
+        'complemento',
+        'bairro',
+        'cidade',
+        'estado',
     ];
 
     protected $casts = [
@@ -26,6 +32,9 @@ class Cliente extends Model
 
     public function pedidos()
     {
-        return $this->hasMany(Pedido::class);
+        // Assumindo que o seu modelo de pedido se chama Pedido
+        // return $this->hasMany(Pedido::class);
     }
+
+    // OS MÉTODOS create() E edit() FORAM REMOVIDOS DAQUI
 }

@@ -27,4 +27,12 @@ class Fornecedor extends Model
 
     // Seus relacionamentos futuros virão aqui...
     // public function produtos() { ... }
+
+
+
+    public function compras()
+    {
+        return $this->hasMany(Compra::class);
+    }
+
 }

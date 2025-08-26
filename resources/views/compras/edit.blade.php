@@ -41,74 +41,75 @@
                         Itens da Nota para Conferência
                     </h3>
                     <div class="space-y-6">
-                        @foreach ($compra->itens as $item)
-                        <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
+                    @foreach ($compra->itens as $item)
+    {{-- E substitua tudo até o @endforeach pelo código abaixo --}}
 
-                            {{-- Container Flex para Nome e Valores --}}
-                            <div class="flex justify-between items-start gap-4">
-                                {{-- Nome do Produto (ocupa a maior parte do espaço) --}}
-                                <div class="flex-grow">
-                                    <span class="block text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                                        ITEM #{{ $loop->iteration }}
-                                    </span>
-                                    <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $item->descricao_item_nota }}</p>
-                                </div>
+    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
 
-                                {{-- Container para Preço, Qtd e Subtotal --}}
-                                {{-- AJUSTADO: Aumentei o espaçamento de 'space-x-6 md:space-x-8' para 'space-x-8 md:space-x-12' --}}
-                                <div class="flex items-center space-x-8 md:space-x-12 text-right flex-shrink-0">
-                                    <div>
-                                        <span class="block text-xs font-medium text-gray-500">PREÇO UNIT. (NOTA)</span>
-                                        <p class="text-md font-semibold">R$ {{ number_format($item->preco_custo_nota, 2, ',', '.') }}</p>
-                                    </div>
-                                    <div>
-                                        <span class="block text-xs font-medium text-gray-500">QTD</span>
-                                        <p class="text-md font-semibold">{{ number_format($item->quantidade, 2, ',', '.') }}</p>
-                                    </div>
-                                    <div>
-                                        <span class="block text-xs font-medium text-gray-500">SUBTOTAL</span>
-                                        <p class="text-md font-semibold">R$ {{ number_format($item->subtotal, 2, ',', '.') }}</p>
-                                    </div>
-                                </div>
-                            </div>
+        {{-- Container Flex para Nome e Valores (Layout Mantido) --}}
+        <div class="flex justify-between items-start gap-4">
+            <div class="flex-grow">
+                <span class="block text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                    ITEM #{{ $loop->iteration }}
+                </span>
+                <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $item->descricao_item_nota }}</p>
+            </div>
+            <div class="flex items-center space-x-8 md:space-x-12 text-right flex-shrink-0">
+                <div>
+                    <span class="block text-xs font-medium text-gray-500">PREÇO UNIT. (NOTA)</span>
+                    <p class="text-md font-semibold">R$ {{ number_format($item->preco_custo_nota, 2, ',', '.') }}</p>
+                </div>
+                <div>
+                    <span class="block text-xs font-medium text-gray-500">QTD</span>
+                    <p class="text-md font-semibold">{{ number_format($item->quantidade, 2, ',', '.') }}</p>
+                </div>
+                <div>
+                    <span class="block text-xs font-medium text-gray-500">SUBTOTAL</span>
+                    <p class="text-md font-semibold">R$ {{ number_format($item->subtotal, 2, ',', '.') }}</p>
+                </div>
+            </div>
+        </div>
 
-                            {{-- Dados Fiscais --}}
-                            {{-- AJUSTADO: Diminuí o espaçamento de 'gap-4' para 'gap-x-6' (horizontal) e 'gap-y-4' (vertical) --}}
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 py-2">
-                                <div>
-                                    <x-input-label value="NCM" />
-                                    <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->ncm ?? 'N/A' }}</p>
-                                </div>
-                                <div>
-                                    <x-input-label value="CFOP" />
-                                    <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->cfop ?? 'N/A' }}</p>
-                                </div>
-                                <div>
-                                    <x-input-label value="EAN" />
-                                    <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->ean ?? 'N/A' }}</p>
-                                </div>
-                            </div>
+        {{-- ======================= INÍCIO DA CORREÇÃO DE LAYOUT ======================= --}}
+        {{-- Dados Fiscais (Layout corrigido para Grid para evitar sobreposição) --}}
+        <div class="grid grid-cols-3 gap-x-6 gap-y-2 py-2">
+            <div>
+                <x-input-label value="NCM" />
+                <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->ncm ?? 'N/A' }}</p>
+            </div>
+            <div>
+                <x-input-label value="CFOP" />
+                <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->cfop ?? 'N/A' }}</p>
+            </div>
+            <div>
+                <x-input-label value="Código de Barras (Sistema)" />
+                <p class="mt-1 text-sm font-semibold text-gray-800 dark:text-gray-200">{{ $item->produto->codigo_barras ?? 'N/A' }}</p>
+            </div>
+        </div>
+        {{-- ======================== FIM DA CORREÇÃO DE LAYOUT ======================== --}}
 
-                            {{-- Campos Editáveis --}}
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                                <div>
-                                    <x-input-label for="preco_entrada_{{ $item->id }}" value="Preço de Venda (Consumidor Final)" />
-                                    <x-text-input type="number" step="0.01" name="itens[{{ $item->id }}][preco_entrada]" id="preco_entrada_{{ $item->id }}" class="block mt-1 w-full" value="{{ old('itens.'.$item->id.'.preco_entrada', number_format($item->preco_custo_nota, 2, '.', '')) }}" />
-                                </div>
-                                <div>
-                                    <x-input-label for="produto_{{ $item->id }}" value="Vincular ao Produto do Sistema" />
-                                    <select name="itens[{{ $item->id }}][produto_id]" id="produto_{{ $item->id }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
-                                        <option value="">Selecione um produto...</option>
-                                        @foreach ($produtos as $produto)
-                                            <option value="{{ $produto->id }}" @selected(old('itens.'.$item->id.'.produto_id', $item->produto_id) == $produto->id)>
-                                                {{ $produto->nome }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        @endforeach
+
+        {{-- Campos Editáveis (Layout Mantido) --}}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div>
+                <x-input-label for="preco_venda_{{ $item->id }}" value="Preço de Venda (Consumidor Final)" />
+                <x-text-input type="number" step="0.01" name="itens[{{ $item->id }}][preco_venda]" id="preco_venda_{{ $item->id }}" class="block mt-1 w-full" 
+                              value="{{ old('itens.'.$item->id.'.preco_venda', number_format($item->produto->preco_venda ?? 0, 2, '.', '')) }}" />
+            </div>
+            <div>
+                <x-input-label for="produto_{{ $item->id }}" value="Vincular ao Produto do Sistema" />
+                <select name="itens[{{ $item->id }}][produto_id]" id="produto_{{ $item->id }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    <option value="">Selecione um produto...</option>
+                    @foreach ($produtos as $produto)
+                        <option value="{{ $produto->id }}" @selected(old('itens.'.$item->id.'.produto_id', $item->produto_id) == $produto->id)>
+                            {{ $produto->nome }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+    </div>
+@endforeach
                     </div>
 
                     <div class="mt-6 flex flex-wrap items-center justify-end gap-4">

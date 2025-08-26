@@ -18,8 +18,10 @@ class Produto extends Model
     protected $fillable = [
         'nome',
         'preco_venda',
+        'codigo_barras',
         'ativo',
         'detalhe_id',
+        'estoque_atual',
         'detalhe_type', // <-- ESTA É A LINHA CRUCIAL QUE FALTAVA
         'preco_custo',
         'categoria_id',
@@ -49,10 +51,10 @@ class Produto extends Model
     /**
      * Um produto TEM UM conjunto de dados fiscais.
      */
-    public function dadoFiscal()
-    {
-        return $this->hasOne(DadoFiscalProduto::class);
-    }
+    public function dadosFiscais()
+{
+    return $this->hasOne(DadoFiscalProduto::class, 'produto_id');
+}
 
     /**
      * ADICIONADO: Um produto PERTENCE A UMA Categoria.
