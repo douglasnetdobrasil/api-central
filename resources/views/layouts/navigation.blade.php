@@ -16,6 +16,7 @@
         {{ __('Dashboard') }}
     </x-nav-link>
 
+    @canany(['ver-produtos', 'ver-fornecedores', 'ver-clientes', 'ver-entrada-notas', 'ver-categorias', 'ver-usuarios', 'ver-perfis', 'ver-transportadoras', 'ver-servicos', 'ver-formas-pagamento'])
     <div class="hidden sm:flex sm:items-center sm:ms-6">
         <x-dropdown align="right" width="48">
             <x-slot name="trigger">
@@ -31,31 +32,363 @@
             </x-slot>
 
             <x-slot name="content">
-                <x-dropdown-link :href="route('produtos.index')">
-                    {{ __('Produtos') }}
-                </x-dropdown-link>
-                <x-dropdown-link :href="route('fornecedores.index')">
-                    {{ __('Fornecedores') }}
-                </x-dropdown-link>
-
-                <x-dropdown-link :href="route('clientes.index')">
-                    {{ __('Clientes') }}
-                </x-dropdown-link>
-                <x-dropdown-link :href="route('compras.index')"> {{-- Pode apontar para index por enquanto --}}
-                 {{ __('Entrada de Notas') }}
-                </x-dropdown-link>
-                <x-dropdown-link :href="route('categorias.index')"> {{-- Pode apontar para index por enquanto --}}
-                 {{ __('Categorias') }}
-                </x-dropdown-link>
-                
-
-                {{-- Futuramente, o link de Clientes virá aqui --}}
-                {{-- <x-dropdown-link :href="route('clientes.index')">
-                    {{ __('Clientes') }}
-                </x-dropdown-link> --}}
+                @can('ver-produtos')
+                    <x-dropdown-link :href="route('produtos.index')">
+                        {{ __('Produtos') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-fornecedores')
+                    <x-dropdown-link :href="route('fornecedores.index')">
+                        {{ __('Fornecedores') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-clientes')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Clientes') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-entrada-notas')
+                    <x-dropdown-link :href="route('compras.index')">
+                        {{ __('Entrada de Notas') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-categorias')
+                    <x-dropdown-link :href="route('categorias.index')">
+                        {{ __('Categorias') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-usuarios')
+                    <x-dropdown-link :href="route('usuarios.index')">
+                        {{ __('Usuarios') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-perfis')
+                    <x-dropdown-link :href="route('perfis.index')">
+                        {{ __('Perfil de Usuarios') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-transportadoras')
+                    <x-dropdown-link :href="route('perfis.index')">
+                        {{ __('Transportadoras') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-servicos')
+                    <x-dropdown-link :href="route('usuarios.index')">
+                        {{ __('Servicos') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-formas-pagamento')
+                    <x-dropdown-link :href="route('usuarios.index')">
+                        {{ __('Formas de Pagamentos') }}
+                    </x-dropdown-link>
+                @endcan
             </x-slot>
         </x-dropdown>
     </div>
+@endcanany
+
+
+@canany(['ver-leads', 'ver-orcamentos', 'ver-pedidos-venda', 'ver-notas-fiscais', 'ver-comissoes'])
+    <div class="hidden sm:flex sm:items-center sm:ms-6">
+        <x-dropdown align="right" width="48">
+            <x-slot name="trigger">
+                <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none transition ease-in-out duration-150">
+                    <div>Vendas</div>
+
+                    <div class="ms-1">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </button>
+            </x-slot>
+
+            <x-slot name="content">
+                @can('ver-leads')
+                    <x-dropdown-link :href="route('produtos.index')">
+                        {{ __('Leads / Oportunidades') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-orcamentos')
+                    <x-dropdown-link :href="route('fornecedores.index')">
+                        {{ __('Orçamentos') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-pedidos-venda')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Pedidos de Venda') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-notas-fiscais')
+                    <x-dropdown-link :href="route('compras.index')">
+                        {{ __('Notas Fiscais (NF-e / NFC-e)') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-comissoes')
+                    <x-dropdown-link :href="route('compras.index')">
+                        {{ __('Comissões') }}
+                    </x-dropdown-link>
+                @endcan
+            </x-slot>
+        </x-dropdown>
+    </div>
+@endcanany
+
+    @canany(['ver-solicitacoes-compra', 'ver-cotacoes', 'ver-pedidos-compra', 'ver-entrada-mercadorias'])
+    <div class="hidden sm:flex sm:items-center sm:ms-6">
+        <x-dropdown align="right" width="48">
+            <x-slot name="trigger">
+                <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none transition ease-in-out duration-150">
+                    <div>Compras</div>
+
+                    <div class="ms-1">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </button>
+            </x-slot>
+
+            <x-slot name="content">
+                @can('ver-solicitacoes-compra')
+                    <x-dropdown-link :href="route('produtos.index')">
+                        {{ __('Solicitações de Compra') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-solicitacoes-compra')
+                    <x-dropdown-link :href="route('compras.index')">
+                        {{ __('Entrada de Nota') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-cotacoes')
+                    <x-dropdown-link :href="route('fornecedores.index')">
+                        {{ __('Cotações') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-pedidos-compra')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Pedidos de Compra') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-entrada-mercadorias')
+                    <x-dropdown-link :href="route('compras.index')">
+                        {{ __('Entrada de Mercadorias') }}
+                    </x-dropdown-link>
+                @endcan
+            </x-slot>
+        </x-dropdown>
+    </div>
+@endcanany
+
+
+
+@canany(['ver-contas-receber', 'ver-contas-pagar', 'ver-fluxo-caixa', 'ver-conciliacao-bancaria', 'ver-centro-custo', 'ver-usuarios'])
+    <div class="hidden sm:flex sm:items-center sm:ms-6">
+        <x-dropdown align="right" width="48">
+            <x-slot name="trigger">
+                <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none transition ease-in-out duration-150">
+                    <div>Financeiro</div>
+
+                    <div class="ms-1">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </button>
+            </x-slot>
+
+            <x-slot name="content">
+                @can('ver-contas-receber')
+                    <x-dropdown-link :href="route('produtos.index')">
+                        {{ __('Contas a Receber') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-contas-pagar')
+                    <x-dropdown-link :href="route('fornecedores.index')">
+                        {{ __('Contas a Pagar') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-fluxo-caixa')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Fluxo de Caixa') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-conciliacao-bancaria')
+                    <x-dropdown-link :href="route('compras.index')">
+                        {{ __('Conciliacao Bancaria') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-centro-custo')
+                    <x-dropdown-link :href="route('categorias.index')">
+                        {{ __('Centro de custo') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-usuarios')
+                    <x-dropdown-link :href="route('usuarios.index')">
+                        {{ __('Usuarios') }}
+                    </x-dropdown-link>
+                @endcan
+            </x-slot>
+        </x-dropdown>
+    </div>
+@endcanany
+
+@canany(['ver-movimentacoes-estoque', 'ver-transferencias-estoque', 'ver-inventario', 'ver-posicao-estoque'])
+    <div class="hidden sm:flex sm:items-center sm:ms-6">
+        <x-dropdown align="right" width="48">
+            <x-slot name="trigger">
+                <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none transition ease-in-out duration-150">
+                    <div>Estoque</div>
+
+                    <div class="ms-1">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </button>
+            </x-slot>
+
+            <x-slot name="content">
+                @can('ver-movimentacoes-estoque')
+                    <x-dropdown-link :href="route('produtos.index')">
+                        {{ __('Movimentações') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-transferencias-estoque')
+                    <x-dropdown-link :href="route('fornecedores.index')">
+                        {{ __('Transferências') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-inventario')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Inventário') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-posicao-estoque')
+                    <x-dropdown-link :href="route('compras.index')">
+                        {{ __('Posição de Estoque') }}
+                    </x-dropdown-link>
+                @endcan
+            </x-slot>
+        </x-dropdown>
+    </div>
+@endcanany
+
+@canany(['ver-ordem-producao', 'ver-estrutura-produto', 'ver-ordem-servico'])
+    <div class="hidden sm:flex sm:items-center sm:ms-6">
+        <x-dropdown align="right" width="48">
+            <x-slot name="trigger">
+                <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none transition ease-in-out duration-150">
+                    <div>Produção</div>
+
+                    <div class="ms-1">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </button>
+            </x-slot>
+
+            <x-slot name="content">
+                @can('ver-ordem-producao')
+                    <x-dropdown-link :href="route('produtos.index')">
+                        {{ __('Ordem de Produção (OP)') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-estrutura-produto')
+                    <x-dropdown-link :href="route('fornecedores.index')">
+                        {{ __('Estrutura de Produto (BOM - Bill of Materials)') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-ordem-servico')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Ordem de Serviço (OS)') }}
+                    </x-dropdown-link>
+                @endcan
+            </x-slot>
+        </x-dropdown>
+    </div>
+@endcanany
+@canany(['ver-relatorio-vendas', 'ver-relatorio-financeiro', 'ver-relatorio-estoque', 'ver-relatorio-compras'])
+    <div class="hidden sm:flex sm:items-center sm:ms-6">
+        <x-dropdown align="right" width="48">
+            <x-slot name="trigger">
+                <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none transition ease-in-out duration-150">
+                    <div>Relatórios</div>
+
+                    <div class="ms-1">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </button>
+            </x-slot>
+
+            <x-slot name="content">
+                @can('ver-relatorio-vendas')
+                    <x-dropdown-link :href="route('produtos.index')">
+                        {{ __('Relatórios de Vendas') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-relatorio-financeiro')
+                    <x-dropdown-link :href="route('fornecedores.index')">
+                        {{ __('Relatórios Financeiros') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-relatorio-estoque')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Relatórios de Estoque') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-relatorio-compras')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Relatórios de Compras') }}
+                    </x-dropdown-link>
+                @endcan
+            </x-slot>
+        </x-dropdown>
+    </div>
+@endcanany
+
+@canany(['ver-config-empresa', 'ver-config-fiscal', 'ver-logs-sistema'])
+    <div class="hidden sm:flex sm:items-center sm:ms-6">
+        <x-dropdown align="right" width="48">
+            <x-slot name="trigger">
+                <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none transition ease-in-out duration-150">
+                    <div>Configurações</div>
+
+                    <div class="ms-1">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </button>
+            </x-slot>
+
+            <x-slot name="content">
+                @can('ver-config-empresa')
+                    <x-dropdown-link :href="route('empresa.index')">
+                        {{ __('Minha Empresa') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-config-fiscal')
+                    <x-dropdown-link :href="route('empresa.index')">
+                        {{ __('Configurações Fiscais') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-logs-sistema')
+                    <x-dropdown-link :href="route('clientes.index')">
+                        {{ __('Logs do Sistema') }}
+                    </x-dropdown-link>
+                @endcan
+            </x-slot>
+        </x-dropdown>
+    </div>
+@endcanany
+
+
+
+
     </div>
             </div>
 

@@ -25,12 +25,19 @@ class DatabaseSeeder extends Seeder
             'email' => 'test@example.com',
         ]);
 
+        $this->call([
+            PermissionSeeder::class,
+            // Outros seeders que você tenha...
+        ]);
+
 
         $this->call([
             ConfiguracoesSeeder::class,
             // ...seus outros seeders aqui
         ]);
     }
+
+    
 
    
 }

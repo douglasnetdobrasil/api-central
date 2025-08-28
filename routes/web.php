@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CompraWebController;
 use App\Http\Controllers\CategoriaController; 
+use App\Http\Controllers\EmpresaController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -39,6 +40,24 @@ Route::delete('/compras/{compra}', [CompraWebController::class, 'destroy'])->nam
     Route::resource('fornecedores', App\Http\Controllers\FornecedorController::class);
 
     Route::resource('clientes', App\Http\Controllers\ClienteController::class);
+
+    Route::middleware(['can:acessar-admin'])->group(function () {
+
+        // Sua rota de perfis, agora dentro do grupo de segurança
+        Route::resource('perfis', App\Http\Controllers\RoleController::class)->except(['show']);
+
+        // A nova rota para o CRUD de usuários
+        Route::resource('usuarios', App\Http\Controllers\UserController::class);
+
+        // Se quisermos uma tela única para todas as permissões, como no plano original,
+        // podemos adicionar uma rota customizada aqui, mas vamos focar no CRUD primeiro.
+    });
+
+    Route::get('/empresas', [EmpresaController::class, 'index'])->name('empresa.index'); // <-- ROTA ADICIONADA
+    Route::get('/empresa/configuracoes', [EmpresaController::class, 'edit'])->name('empresa.edit');
+    Route::patch('/empresa/configuracoes', [EmpresaController::class, 'update'])->name('empresa.update');
+
+
 });
 
 require __DIR__.'/auth.php';

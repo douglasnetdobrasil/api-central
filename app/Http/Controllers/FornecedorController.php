@@ -41,7 +41,8 @@ class FornecedorController extends Controller
      */
     public function create()
     {
-        return view('fornecedores.form');
+        $fornecedor = new Fornecedor();
+        return view('fornecedores.form', compact('fornecedor'));
     }
     
     public function edit(Fornecedor $fornecedor)

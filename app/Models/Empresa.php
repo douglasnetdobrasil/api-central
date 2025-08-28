@@ -13,8 +13,15 @@ class Empresa extends Model
 
     protected $fillable = [
         'razao_social',
+        'nome_fantasia', // Adicionado
         'cnpj',
+        'inscricao_estadual', // Adicionado
         'nicho_negocio',
+        'endereco', // Adicionado
+        'telefone', // Adicionado
+        'email', // Adicionado
+        'website', // Adicionado
+        'logo_path', // Adicionado
     ];
 
     /**

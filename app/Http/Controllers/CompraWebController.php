@@ -147,6 +147,8 @@ class CompraWebController extends Controller
     public function salvarImportacao(Request $request)
     {
         $dadosNFeDaSessao = Session::get('importacao_nfe');
+
+       
     
         if (!$dadosNFeDaSessao) {
             return redirect()->route('compras.index')->with('error', 'Sessão da importação expirada ou dados não encontrados.');
@@ -202,6 +204,13 @@ class CompraWebController extends Controller
                     'detalhe_id' => null,
                     'detalhe_type' => null,
                 ];
+
+                dd(
+                    'VERIFICANDO O PRIMEIRO ITEM DO LOOP:',
+                    'Nome Final Calculado:', $nomeFinal,
+                    'Categoria Final Calculada:', $categoriaFinal,
+                    'Array completo para salvar o produto:', $dadosFinaisProduto
+                );
     
                 if (empty($dadosFinaisProduto['nome']) || empty($dadosFinaisProduto['categoria_id'])) {
                     continue;
@@ -226,7 +235,10 @@ class CompraWebController extends Controller
                         $produtoFinal = Produto::create($dadosFinaisProduto);
                     }
                 }
-    
+
+
+                   // ================== ADICIONE O DEBUG AQUI ==================
+
                 if ($produtoFinal) {
                     $fatorConversao = (float)($dadosModificados['fator_conversao'] ?? 1);
                     $quantidadeDaNota = (float)$itemOriginal['quantidade'];
