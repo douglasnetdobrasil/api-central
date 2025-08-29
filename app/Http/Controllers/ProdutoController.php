@@ -177,6 +177,18 @@ class ProdutoController extends Controller
             return back()->with('error', 'Ocorreu um erro: ' . $e->getMessage())->withInput();
         }
     }
+
+    public function search(Request $request)
+{
+    $term = $request->get('term', '');
+    
+    $produtos = Produto::where('nome', 'LIKE', '%' . $term . '%')
+                       ->orWhere('codigo_barras', 'LIKE', '%' . $term . '%')
+                       ->limit(10)
+                       ->get(['id', 'nome', 'preco_custo']);
+
+    return response()->json($produtos);
+}
     
     /**
      * Remove the specified resource from storage.

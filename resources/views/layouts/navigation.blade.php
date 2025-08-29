@@ -68,20 +68,16 @@
                     </x-dropdown-link>
                 @endcan
                 @can('ver-transportadoras')
-                    <x-dropdown-link :href="route('perfis.index')">
+                    <x-dropdown-link :href="route('transportadoras.index')">
                         {{ __('Transportadoras') }}
                     </x-dropdown-link>
                 @endcan
-                @can('ver-servicos')
-                    <x-dropdown-link :href="route('usuarios.index')">
-                        {{ __('Servicos') }}
-                    </x-dropdown-link>
-                @endcan
                 @can('ver-formas-pagamento')
-                    <x-dropdown-link :href="route('usuarios.index')">
-                        {{ __('Formas de Pagamentos') }}
+                    <x-dropdown-link :href="route('formas-pagamento.index')">
+                        {{ __('Formas de Pagamento') }}
                     </x-dropdown-link>
                 @endcan
+             
             </x-slot>
         </x-dropdown>
     </div>

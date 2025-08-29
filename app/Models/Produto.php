@@ -21,6 +21,7 @@ class Produto extends Model
         'codigo_barras',
         'ativo',
         'detalhe_id',
+        'margem_lucro',
         'estoque_atual',
         'detalhe_type', // <-- ESTA É A LINHA CRUCIAL QUE FALTAVA
         'preco_custo',

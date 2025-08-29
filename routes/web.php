@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CompraWebController;
 use App\Http\Controllers\CategoriaController; 
 use App\Http\Controllers\EmpresaController;
+use App\Http\Controllers\TransportadoraController;
+use App\Http\Controllers\FormaPagamentoController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -57,7 +59,11 @@ Route::delete('/compras/{compra}', [CompraWebController::class, 'destroy'])->nam
     Route::get('/empresa/configuracoes', [EmpresaController::class, 'edit'])->name('empresa.edit');
     Route::patch('/empresa/configuracoes', [EmpresaController::class, 'update'])->name('empresa.update');
 
+    Route::get('/produtos/search', [ProdutoController::class, 'search'])->name('produtos.search');
 
+    Route::resource('transportadoras', TransportadoraController::class);
+
+    Route::resource('formas-pagamento', FormaPagamentoController::class);
 });
 
 require __DIR__.'/auth.php';
