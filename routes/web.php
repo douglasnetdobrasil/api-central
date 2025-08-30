@@ -7,6 +7,8 @@ use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\TransportadoraController;
 use App\Http\Controllers\FormaPagamentoController;
+use App\Http\Controllers\OrcamentoController;
+use App\Http\Controllers\ProdutoController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -55,15 +57,27 @@ Route::delete('/compras/{compra}', [CompraWebController::class, 'destroy'])->nam
         // podemos adicionar uma rota customizada aqui, mas vamos focar no CRUD primeiro.
     });
 
-    Route::get('/empresas', [EmpresaController::class, 'index'])->name('empresa.index'); // <-- ROTA ADICIONADA
-    Route::get('/empresa/configuracoes', [EmpresaController::class, 'edit'])->name('empresa.edit');
-    Route::patch('/empresa/configuracoes', [EmpresaController::class, 'update'])->name('empresa.update');
+  // --- ROTAS DE GERENCIAMENTO DE EMPRESAS (PARA O ADMIN) ---
+// O Route::resource cria as rotas index, create, store e destroy automaticamente.
+Route::resource('empresas', EmpresaController::class)->except(['show'])->names('empresa');
+
+// Definimos as rotas de edição do admin separadamente para dar nomes específicos
+Route::get('/empresas/{empresa}/edit', [EmpresaController::class, 'editAdmin'])->name('empresa.editAdmin');
+Route::put('/empresas/{empresa}', [EmpresaController::class, 'updateAdmin'])->name('empresa.updateAdmin');
+
+
+// --- ROTA DE CONFIGURAÇÕES (PARA O USUÁRIO EDITAR A PRÓPRIA EMPRESA) ---
+Route::get('/configuracoes/empresa', [EmpresaController::class, 'edit'])->name('configuracoes.empresa.edit');
+Route::patch('/configuracoes/empresa', [EmpresaController::class, 'update'])->name('configuracoes.empresa.update');
 
     Route::get('/produtos/search', [ProdutoController::class, 'search'])->name('produtos.search');
 
     Route::resource('transportadoras', TransportadoraController::class);
 
     Route::resource('formas-pagamento', FormaPagamentoController::class);
+
+
+    Route::resource('orcamentos', OrcamentoController::class);
 });
 
 require __DIR__.'/auth.php';

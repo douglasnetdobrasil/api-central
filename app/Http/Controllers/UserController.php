@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Spatie\Permission\Models\Role; // Importe o model de Role do Spatie
+use App\Models\Empresa;
+use App\Http\Controllers\EmpresaController;
 
 class UserController extends Controller
 {
@@ -24,11 +26,13 @@ class UserController extends Controller
      * Show the form for creating a new resource.
      */
     public function create()
-    {
-        // Pega todos os perfis para poder listá-los no formulário
-        $roles = Role::all();
-        return view('admin.users.create', compact('roles'));
-    }
+{
+    $roles = Role::all();
+    $empresas = Empresa::orderBy('razao_social')->get(); // <-- ADICIONE ESTA LINHA
+
+    // Passe a variável $empresas para a view
+    return view('admin.users.create', compact('roles', 'empresas'));
+}
 
     /**
      * Store a newly created resource in storage.
@@ -39,30 +43,33 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'roles' => 'required|array' // Valida que pelo menos um perfil foi selecionado
+            'roles' => ['nullable', 'array'],
+            'empresa_id' => ['required', 'exists:empresas,id'], // <-- VALIDAÇÃO ADICIONADA
         ]);
-
+    
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'empresa_id' => $request->empresa_id, // <-- CAMPO ADICIONADO
         ]);
-
-        // Usa o método do Spatie para atribuir os perfis
-        $user->syncRoles($request->roles);
-
-        return redirect()->route('usuarios.index')->with('success', 'Usuário criado com sucesso!');
+    
+        if ($request->has('roles')) {
+            $user->syncRoles($request->roles);
+        }
+    
+        return redirect()->route('usuarios.index')
+                         ->with('success', 'Usuário criado com sucesso.');
     }
-
     /**
      * Show the form for editing the specified resource.
      */
     public function edit(User $usuario)
     {
         $roles = Role::all();
-        // Carrega os perfis que o usuário já possui
-        $usuario->load('roles');
-        return view('admin.users.edit', compact('usuario', 'roles'));
+        $empresas = Empresa::orderBy('razao_social')->get(); // <-- ADICIONAR ESTA LINHA
+    
+        return view('admin.users.edit', compact('usuario', 'roles', 'empresas'));
     }
 
     /**
@@ -74,22 +81,25 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class.',email,'.$usuario->id],
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
-            'roles' => 'required|array'
+            'roles' => ['nullable', 'array'],
+            'empresa_id' => ['required', 'exists:empresas,id'], // <-- VALIDAÇÃO ADICIONADA
         ]);
-
-        $data = $request->except('password');
+    
+        // Pega todos os dados validados, exceto a senha
+        $data = $request->only('name', 'email', 'empresa_id'); // <-- 'empresa_id' ADICIONADO AQUI
         
-        // Só atualiza a senha se uma nova for fornecida
+        // Só atualiza a senha se ela for preenchida no formulário
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }
-
+    
         $usuario->update($data);
-        $usuario->syncRoles($request->roles);
-
-        return redirect()->route('usuarios.index')->with('success', 'Usuário atualizado com sucesso!');
+    
+        $usuario->syncRoles($request->roles ?? []);
+    
+        return redirect()->route('usuarios.index')
+                         ->with('success', 'Usuário atualizado com sucesso.');
     }
-
     /**
      * Remove the specified resource from storage.
      */

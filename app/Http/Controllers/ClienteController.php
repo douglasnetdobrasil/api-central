@@ -6,6 +6,7 @@ use App\Models\Cliente; // <-- A CORREÇÃO ESTÁ AQUI
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 
 class ClienteController extends Controller
 {
@@ -43,9 +44,9 @@ class ClienteController extends Controller
      */
     public function create()
     {
-        // Cria um "molde" de cliente vazio para o formulário
+        // Precisamos passar um objeto vazio para o formulário não dar erro de variável indefinida
         $cliente = new Cliente();
-        return view('clientes.form', compact('cliente'));
+        return view('clientes.form', compact('cliente')); // ou 'admin.clientes.form' dependendo da sua estrutura
     }
 
     /**
@@ -66,6 +67,10 @@ class ClienteController extends Controller
             'cidade' => 'nullable|string|max:255',
             'estado' => 'nullable|string|max:2',
         ]);
+    
+        // ===== A LINHA DA CORREÇÃO ESTÁ AQUI =====
+        $validatedData['empresa_id'] = Auth::user()->empresa_id;
+        // ==========================================
     
         Cliente::create($validatedData);
     
@@ -110,6 +115,7 @@ class ClienteController extends Controller
         ]);
     
         $cliente->update($validatedData);
+        $validatedData['empresa_id'] = Auth::user()->empresa_id;
     
         return redirect()->route('clientes.index')->with('success', 'Cliente atualizado com sucesso!');
     }

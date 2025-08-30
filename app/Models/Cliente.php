@@ -15,6 +15,7 @@ class Cliente extends Model
         'nome',
         'cpf_cnpj',
         'email',
+        'empresa_id',
         'telefone',
         // Adicione os novos campos
         'cep',

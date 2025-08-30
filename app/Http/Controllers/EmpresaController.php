@@ -66,4 +66,62 @@ class EmpresaController extends Controller
 
         return redirect()->route('empresa.edit')->with('success', 'Dados da empresa salvos com sucesso!');
     }
+
+
+    public function create()
+    {
+        // Passa uma nova instância vazia para o formulário
+        $empresa = new Empresa();
+        return view('admin.empresa.create', compact('empresa'));
+    }
+
+    /**
+     * Salva a nova empresa no banco de dados.
+     */
+    public function store(Request $request)
+    {
+        $validatedData = $request->validate([
+            'razao_social' => 'required|string|max:255',
+            'cnpj' => 'required|string|max:18|unique:empresas,cnpj',
+            'nicho_negocio' => 'required|in:mercado,oficina,restaurante,loja_roupas',
+        ]);
+
+        Empresa::create($validatedData);
+
+        return redirect()->route('empresa.index')->with('success', 'Empresa cadastrada com sucesso!');
+    }
+
+
+    public function editAdmin(Empresa $empresa)
+    {
+        return view('admin.empresa.edit', compact('empresa'));
+    }
+
+    /**
+     * (ADMIN) Atualiza os dados de uma empresa específica.
+     */
+    public function updateAdmin(Request $request, Empresa $empresa)
+    {
+        $validatedData = $request->validate([
+            'razao_social' => 'required|string|max:255',
+            'cnpj' => 'required|string|max:18|unique:empresas,cnpj,' . $empresa->id,
+            'nicho_negocio' => 'required|in:mercado,oficina,restaurante,loja_roupas',
+        ]);
+        
+        $empresa->update($validatedData);
+        return redirect()->route('empresa.index')->with('success', 'Empresa atualizada com sucesso!');
+    }
+
+    /**
+     * (ADMIN) Exclui uma empresa.
+     */
+    public function destroy(Empresa $empresa)
+    {
+        if ($empresa->usuarios()->exists()) {
+            return back()->with('error', 'Não é possível excluir uma empresa que possui usuários vinculados.');
+        }
+
+        $empresa->delete();
+        return redirect()->route('empresa.index')->with('success', 'Empresa excluída com sucesso!');
+    }
 }

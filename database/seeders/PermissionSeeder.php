@@ -71,6 +71,7 @@ class PermissionSeeder extends Seeder
             'ver-config-empresa',
             'ver-config-fiscal',
             'ver-logs-sistema',
+            'acessar-admin',
         ];
 
         // Cria as permissões que não existirem

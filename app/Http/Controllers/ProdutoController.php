@@ -179,16 +179,15 @@ class ProdutoController extends Controller
     }
 
     public function search(Request $request)
-{
-    $term = $request->get('term', '');
+    {
+        $term = $request->get('term', '');
+        $produtos = Produto::where('nome', 'LIKE', '%' . $term . '%')
+                           ->orWhere('codigo_barras', 'LIKE', '%' . $term . '%')
+                           ->limit(10)
+                           ->get(['id', 'nome', 'preco_venda']); // Precisa incluir o preco_venda
     
-    $produtos = Produto::where('nome', 'LIKE', '%' . $term . '%')
-                       ->orWhere('codigo_barras', 'LIKE', '%' . $term . '%')
-                       ->limit(10)
-                       ->get(['id', 'nome', 'preco_custo']);
-
-    return response()->json($produtos);
-}
+        return response()->json($produtos);
+    }
     
     /**
      * Remove the specified resource from storage.

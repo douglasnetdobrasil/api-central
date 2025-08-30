@@ -12,12 +12,27 @@
     <x-input-error class="mt-2" :messages="$errors->get('email')" />
 </div>
 
+{{-- ===== INÍCIO DO NOVO CAMPO DE EMPRESA ===== --}}
+<div class="mt-4">
+    <x-input-label for="empresa_id" value="Empresa" />
+    <select name="empresa_id" id="empresa_id" class="block mt-1 w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm" required>
+        <option value="">Selecione uma empresa</option>
+        @foreach ($empresas as $empresa)
+            <option value="{{ $empresa->id }}" @selected(old('empresa_id', $usuario->empresa_id ?? null) == $empresa->id)>
+                {{ $empresa->razao_social }}
+            </option>
+        @endforeach
+    </select>
+    <x-input-error class="mt-2" :messages="$errors->get('empresa_id')" />
+</div>
+{{-- ===== FIM DO NOVO CAMPO DE EMPRESA ===== --}}
+
 {{-- Senha --}}
 <div class="mt-4">
     <x-input-label for="password" value="Senha" />
     <x-text-input id="password" name="password" type="password" class="mt-1 block w-full" />
     <x-input-error class="mt-2" :messages="$errors->get('password')" />
-    @if (isset($usuario))
+    @if (isset($usuario) && $usuario->exists)
         <small class="text-gray-500">Deixe em branco para não alterar a senha.</small>
     @endif
 </div>
@@ -38,9 +53,8 @@
                 <input type="checkbox"
                        name="roles[]"
                        value="{{ $role->name }}"
-                       class="rounded"
-                       {{-- Verifica se o usuário já tem o perfil (na edição) ou se foi selecionado anteriormente (no erro de validação) --}}
-                       @if( (isset($usuario) && $usuario->roles->contains($role)) || in_array($role->id, old('roles', [])) ) checked @endif
+                       class="rounded border-gray-300 dark:border-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500"
+                       @if( (isset($usuario) && $usuario->roles->contains($role)) || in_array($role->name, old('roles', [])) ) checked @endif
                 >
                 <span>{{ $role->name }}</span>
             </label>
