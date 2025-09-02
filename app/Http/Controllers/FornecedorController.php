@@ -64,7 +64,7 @@ class FornecedorController extends Controller
             'telefone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
         ]);
-    
+       
         Fornecedor::create($validatedData);
     
         return redirect()->route('fornecedores.index')->with('success', 'Fornecedor cadastrado com sucesso!');

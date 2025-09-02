@@ -86,7 +86,7 @@ class PermissionSeeder extends Seeder
         $adminRole->syncPermissions(Permission::all());
 
         // Cria o perfil Motoboy (exemplo mínimo)
-        $motoboyRole = Role::firstOrCreate(['name' => 'Motoboy']);
+        $motoboyRole = Role::firstOrCreate(['name' => 'usuario']);
         $motoboyRole->syncPermissions([
             'ver-pedidos-venda', // Exemplo: motoboy só pode ver os pedidos de venda
         ]);

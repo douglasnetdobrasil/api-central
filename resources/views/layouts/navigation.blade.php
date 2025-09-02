@@ -157,7 +157,7 @@
                     </x-dropdown-link>
                 @endcan
                 @can('ver-cotacoes')
-                    <x-dropdown-link :href="route('fornecedores.index')">
+                    <x-dropdown-link :href="route('cotacoes.index')">
                         {{ __('Cotações') }}
                     </x-dropdown-link>
                 @endcan

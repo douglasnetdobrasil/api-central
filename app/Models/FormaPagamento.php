@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\EmpresaScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class FormaPagamento extends Model
 {
     use HasFactory;
+
+    protected $table = 'forma_pagamentos';
 
     protected $fillable = [
         'empresa_id',
@@ -18,9 +21,12 @@ class FormaPagamento extends Model
         'ativo',
     ];
 
-    // Relação: Uma forma de pagamento pertence a uma empresa
-    public function empresa()
+    protected $casts = [
+        'ativo' => 'boolean',
+    ];
+
+    protected static function booted(): void
     {
-        return $this->belongsTo(Empresa::class);
+        static::addGlobalScope(new EmpresaScope);
     }
 }

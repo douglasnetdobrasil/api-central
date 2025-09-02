@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Configuracao;
+use App\Models\Scopes\EmpresaScope;
 
 class Produto extends Model
 {
@@ -26,6 +27,7 @@ class Produto extends Model
         'detalhe_type', // <-- ESTA É A LINHA CRUCIAL QUE FALTAVA
         'preco_custo',
         'categoria_id',
+        'empresa_id'
     ];
 
     /**
@@ -65,6 +67,13 @@ class Produto extends Model
         return $this->belongsTo(Categoria::class);
     }
 
+  //  protected static function booted(): void
+   // {
+    //    static::addGlobalScope(new EmpresaScope);
+   // }
+
+    
+
 
     // --- LÓGICA DE NEGÓCIO ---
 
@@ -97,4 +106,9 @@ class Produto extends Model
         // Arredonda para 2 casas decimais
         return round($precoVenda, 2);
     }
+
+    public function cotacoes()
+{
+    return $this->belongsToMany(Cotacao::class, 'cotacao_produto')->withPivot('quantidade');
+}
 }

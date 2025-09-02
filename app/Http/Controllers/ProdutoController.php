@@ -7,7 +7,8 @@ use App\Models\Produto;
 use App\Models\Categoria;
 use App\Models\DadoFiscalProduto; // <-- FALTAVA ESTA LINHA
 use Illuminate\Support\Facades\DB;   // <-- FALTAVA ESTA LINHA
-use Exception;                      // <-- FALTAVA ESTA LINHA
+use Exception; 
+use Illuminate\Support\Facades\Auth;                     // <-- FALTAVA ESTA LINHA
 
 class ProdutoController extends Controller
 {
@@ -89,7 +90,7 @@ class ProdutoController extends Controller
             'fiscal.cofins_cst' => 'nullable|string|max:2',
             'fiscal.csosn' => 'nullable|string|max:4',
         ]);
-    
+       
         DB::beginTransaction();
         try {
             $produto = Produto::create($validatedData);
@@ -177,17 +178,50 @@ class ProdutoController extends Controller
             return back()->with('error', 'Ocorreu um erro: ' . $e->getMessage())->withInput();
         }
     }
-
+  
+    /*
     public function search(Request $request)
     {
-        $term = $request->get('term', '');
-        $produtos = Produto::where('nome', 'LIKE', '%' . $term . '%')
-                           ->orWhere('codigo_barras', 'LIKE', '%' . $term . '%')
-                           ->limit(10)
-                           ->get(['id', 'nome', 'preco_venda']); // Precisa incluir o preco_venda
+        $term = $request->query('term');
+        if (strlen($term) < 2) {
+            return response()->json([]);
+        }
+    
+        $produtos = Produto::where('empresa_id', Auth::user()->empresa_id)
+                          ->where('ativo', true)
+                          ->where(function ($query) use ($term) {
+                              $query->where('nome', 'LIKE', "%{$term}%")
+                                    ->orWhere('codigo_barras', 'LIKE', "%{$term}%");
+                          })
+                          ->select('id', 'nome', 'preco_venda')
+                          ->limit(15)
+                          ->get();
     
         return response()->json($produtos);
     }
+    */
+    public function search(Request $request)
+{
+    $term = $request->query('term');
+
+    if (strlen($term) < 2) {
+        return response()->json([]);
+    }
+
+    $produtos = Produto::where('empresa_id', Auth::user()->empresa_id)
+                      ->where('ativo', true)
+                      ->where(function ($query) use ($term) {
+                          $query->where('nome', 'LIKE', "%{$term}%")
+                                ->orWhere('codigo_barras', 'LIKE', "%{$term}%");
+                      })
+                      ->select('id', 'nome', 'preco_venda')
+                      ->limit(15)
+                      ->get();
+
+    return response()->json($produtos);
+}
+    
+
     
     /**
      * Remove the specified resource from storage.

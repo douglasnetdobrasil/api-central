@@ -5,6 +5,8 @@ namespace App\Providers;
 use Illuminate\Support\Facades\Gate;
 use App\Models\User;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use App\Models\Orcamento; // Adicione esta linha no topo
+use App\Policies\OrcamentoPolicy; // Adicione esta linha no topo
 
 class AuthServiceProvider extends ServiceProvider
 {

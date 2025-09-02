@@ -9,6 +9,7 @@ use App\Http\Controllers\TransportadoraController;
 use App\Http\Controllers\FormaPagamentoController;
 use App\Http\Controllers\OrcamentoController;
 use App\Http\Controllers\ProdutoController;
+use App\Http\Controllers\CotacaoController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -38,6 +39,8 @@ Route::delete('/compras/{compra}', [CompraWebController::class, 'destroy'])->nam
 
 // Rota para o CRUD de Categorias
     Route::resource('categorias', CategoriaController::class);
+
+    Route::get('/produtos/search', [ProdutoController::class, 'search'])->name('produtos.search');
 
     Route::resource('produtos', App\Http\Controllers\ProdutoController::class);
 
@@ -70,7 +73,7 @@ Route::put('/empresas/{empresa}', [EmpresaController::class, 'updateAdmin'])->na
 Route::get('/configuracoes/empresa', [EmpresaController::class, 'edit'])->name('configuracoes.empresa.edit');
 Route::patch('/configuracoes/empresa', [EmpresaController::class, 'update'])->name('configuracoes.empresa.update');
 
-    Route::get('/produtos/search', [ProdutoController::class, 'search'])->name('produtos.search');
+    
 
     Route::resource('transportadoras', TransportadoraController::class);
 
@@ -78,6 +81,10 @@ Route::patch('/configuracoes/empresa', [EmpresaController::class, 'update'])->na
 
 
     Route::resource('orcamentos', OrcamentoController::class);
+
+    // ROTA PARA O MÓDULO DE COTAÇÕES
+    Route::resource('cotacoes', CotacaoController::class);
+
 });
 
 require __DIR__.'/auth.php';

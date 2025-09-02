@@ -28,16 +28,20 @@
 
 <div class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
     <label for="ativo" class="flex items-center">
-        <x-checkbox id="ativo" name="ativo" :checked="old('ativo', $formaPagamento->ativo ?? true)" />
+        {{-- 1. Adiciona um campo oculto com valor "0". Ele só será enviado se o checkbox estiver desmarcado. --}}
+        <input type="hidden" name="ativo" value="0">
+        
+        {{-- 2. Define o valor do checkbox como "1". Se estiver marcado, ele sobrescreve o campo oculto. --}}
+        <x-checkbox id="ativo" name="ativo" value="1" :checked="old('ativo', $formaPagamento->ativo ?? true)" />
+
         <span class="ms-2 text-sm text-gray-600 dark:text-gray-400">Manter Ativo</span>
     </label>
 </div>
-
 <div class="flex items-center justify-end mt-8">
-    <a href="{{ route('formas-pagamento.index') }}" class="text-sm ... mr-4">
+    <a href="{{ route('formas-pagamento.index') }}" class="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800 mr-4">
        Cancelar
    </a>
    <x-primary-button>
        Salvar
-   </primary-button>
+   </x-primary-button>
 </div>
