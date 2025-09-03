@@ -79,5 +79,20 @@ class CotacaoController extends Controller
         }
     }
 
+    public function show(Cotacao $cotacao)
+    {
+        // Carrega os relacionamentos necessários de forma otimizada (Eager Loading)
+        $cotacao->load(['produtos', 'fornecedores', 'respostas']);
+
+        // Para facilitar a exibição na view, vamos criar uma matriz/grid com as respostas
+        // que pode ser acessada por [produto_id][fornecedor_id]
+        $respostasGrid = [];
+        foreach ($cotacao->respostas as $resposta) {
+            $respostasGrid[$resposta->produto_id][$resposta->fornecedor_id] = $resposta;
+        }
+
+        return view('cotacoes.show', compact('cotacao', 'respostasGrid'));
+    }
+
     // Os outros métodos (show, edit, update, destroy) serão implementados depois.
 }

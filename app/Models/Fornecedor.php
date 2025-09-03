@@ -31,12 +31,12 @@ class Fornecedor extends Model
     // Seus relacionamentos futuros virão aqui...
     // public function produtos() { ... }
 
-    /*
+    
     protected static function booted(): void
     {
         static::addGlobalScope(new EmpresaScope);
     }
-    */
+    
     protected $casts = [
         'ativo' => 'boolean',
     ];

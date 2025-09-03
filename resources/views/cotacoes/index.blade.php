@@ -40,7 +40,7 @@
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">#{{ $cotacao->id }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $cotacao->descricao ?? '-' }}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $cotacao->data_cotacao->format('d/m/Y') }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $cotacao->data_cotacao?->format('d/m/Y') ?? '-' }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $cotacao->produtos_count }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $cotacao->fornecedores_count }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm">
@@ -54,7 +54,7 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
                                         {{-- Futuramente, este link levará para a tela de análise --}}
-                                        <a href="#" class="text-blue-600 hover:text-blue-900">Analisar</a>
+                                        <a href="{{ route('cotacoes.show', $cotacao) }}" class="text-blue-600 hover:text-blue-900">Analisar</a>
                                         <a href="{{ route('cotacoes.edit', $cotacao) }}" class="text-indigo-600 hover:text-indigo-900">Editar</a>
                                         <form action="{{ route('cotacoes.destroy', $cotacao) }}" method="POST" class="inline-block" onsubmit="return confirm('Tem certeza que deseja excluir?');">
                                             @csrf

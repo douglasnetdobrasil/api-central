@@ -178,12 +178,19 @@ public function revisarImportacao()
     
         DB::beginTransaction();
         try {
+            // ... (código inicial do método sem alterações)
             $configuracoes = Configuracao::pluck('valor', 'chave')->all();
             $margensCategorias = Categoria::pluck('margem_lucro', 'id');
             $margemPadrao = (float)($configuracoes['margem_lucro_padrao'] ?? 0);
-            $categoriaPadraoId = $configuracoes['categoria_padrao_id'] ?? 1; // Usa ID 1 como fallback
-    
-            $fornecedor = Fornecedor::firstOrCreate(['cpf_cnpj' => $dadosNFeDaSessao['fornecedor']['cnpj']], ['razao_social' => $dadosNFeDaSessao['fornecedor']['razao_social']]);
+            $categoriaPadraoId = $configuracoes['categoria_padrao_id'] ?? 1;
+
+            $fornecedor = Fornecedor::firstOrCreate(
+                ['cpf_cnpj' => $dadosNFeDaSessao['fornecedor']['cnpj']],
+                [
+                    'razao_social' => $dadosNFeDaSessao['fornecedor']['razao_social'],
+                    'empresa_id' => Auth::user()->empresa_id
+                ]
+            );
             
             $compra = Compra::create([
                 'fornecedor_id' => $fornecedor->id,
@@ -196,6 +203,7 @@ public function revisarImportacao()
             ]);
     
             foreach ($dadosNFeDaSessao['itens'] as $index => $itemOriginal) {
+                // ... (código de cálculo de margem e preço sem alterações)
                 $dadosModificados = $request->input("itens.$index", []);
                 $categoriaFinal = $dadosModificados['categoria_id'] ?? $itemOriginal['vinculo_existente']['categoria_id'] ?? $categoriaPadraoId;
                 $precoCusto = (float)$itemOriginal['preco_custo'];
@@ -203,20 +211,20 @@ public function revisarImportacao()
                 $precoVendaFinal = (float)($dadosModificados['preco_venda'] ?? 0);
     
                 if ($precoVendaFinal > $precoCusto) {
-                    // Se o usuário digitou um preço válido, calcula a margem a partir dele
                     $margemFinal = (($precoVendaFinal / $precoCusto) - 1) * 100;
                 } else {
-                    // Se não, usa a hierarquia para recalcular o preço e a margem
                     $margemFinal = (float)($margensCategorias[$categoriaFinal] ?? $margemPadrao);
                     $precoVendaFinal = $precoCusto * (1 + ($margemFinal / 100));
                 }
-    
+
+                // ===== ALTERAÇÃO PRINCIPAL AQUI =====
                 $dadosFinaisProduto = [
+                    'empresa_id' => Auth::user()->empresa_id, // <-- ADIÇÃO 1: Inclui o ID da empresa nos dados
                     'nome' => $dadosModificados['nome'] ?? $itemOriginal['descricao_nota'],
                     'categoria_id' => $categoriaFinal,
                     'preco_venda' => $precoVendaFinal,
                     'preco_custo' => $precoCusto,
-                    'margem_lucro' => $margemFinal, // A mágica acontece aqui!
+                    'margem_lucro' => $margemFinal,
                     'codigo_barras' => $itemOriginal['ean'],
                     'ativo' => true,
                 ];
@@ -225,18 +233,24 @@ public function revisarImportacao()
                 $produtoFinal = null;
     
                 if ($produtoIdVinculado) {
+                    // Aqui, a busca já deve estar protegida pelo Global Scope que adicionámos ao modelo Produto
                     if ($produto = Produto::find($produtoIdVinculado)) {
                         $produto->update($dadosFinaisProduto);
                         $produtoFinal = $produto;
                     }
                 } else {
+                    // ===== ALTERAÇÃO NA CRIAÇÃO/BUSCA DO PRODUTO =====
                     $produtoFinal = Produto::updateOrCreate(
-                        ['codigo_barras' => $dadosFinaisProduto['codigo_barras']],
-                        $dadosFinaisProduto
+                        [
+                            'codigo_barras' => $dadosFinaisProduto['codigo_barras'],
+                            'empresa_id' => Auth::user()->empresa_id // <-- ADIÇÃO 2: Usa empresa_id na busca para evitar conflitos
+                        ],
+                        $dadosFinaisProduto // O empresa_id já está neste array para o caso de criação
                     );
                 }
     
                 if ($produtoFinal) {
+                    // ... (resto do código para incrementar estoque, salvar item_compra, etc., continua igual)
                     $produtoFinal->increment('estoque_atual', (float)$itemOriginal['quantidade']);
                     ProdutoFornecedor::updateOrCreate(
                         ['fornecedor_id' => $fornecedor->id, 'codigo_produto_fornecedor' => $itemOriginal['codigo_fornecedor']],

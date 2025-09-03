@@ -107,6 +107,11 @@ class Produto extends Model
         return round($precoVenda, 2);
     }
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new EmpresaScope);
+    }
+
     public function cotacoes()
 {
     return $this->belongsToMany(Cotacao::class, 'cotacao_produto')->withPivot('quantidade');

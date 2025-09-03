@@ -111,7 +111,7 @@
                     </x-dropdown-link>
                 @endcan
                 @can('ver-pedidos-venda')
-                    <x-dropdown-link :href="route('clientes.index')">
+                    <x-dropdown-link :href="route('pedidos.index')">
                         {{ __('Pedidos de Venda') }}
                     </x-dropdown-link>
                 @endcan

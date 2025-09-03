@@ -1,7 +1,8 @@
 <x-app-layout>
     <x-slot name="header">
+        {{-- CORREÇÃO LÓGICA: Usando $produto->exists para o título --}}
         <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-            {{ isset($produto) ? 'Editar Produto' : 'Cadastrar Novo Produto' }}
+            {{ $produto->exists ? 'Editar Produto' : 'Cadastrar Novo Produto' }}
         </h2>
     </x-slot>
 
@@ -10,7 +11,6 @@
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 dark:text-gray-100">
                     
-                    {{-- Exibir erros de validação (já existente) --}}
                     @if ($errors->any())
                         <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
                             <ul>
@@ -21,7 +21,6 @@
                         </div>
                     @endif
 
-                    {{-- CORREÇÃO: Adicionado bloco para exibir erros gerais vindos do controller --}}
                     @if (session('error'))
                         <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
                             <strong class="font-bold">Ocorreu um Erro!</strong>
@@ -29,11 +28,22 @@
                         </div>
                     @endif
 
-                    <form action="{{ isset($produto) ? route('produtos.update', $produto->id) : route('produtos.store') }}" method="POST">
-                        @csrf
-                        @if (isset($produto))
+                    {{-- ===================================================================== --}}
+                    {{-- |||||||||||||||||||||||||| ÁREA CORRIGIDA |||||||||||||||||||||||||| --}}
+                    {{-- ===================================================================== --}}
+                    @if ($produto->exists)
+                        {{-- Formulário para EDITAR um produto existente --}}
+                        <form action="{{ route('produtos.update', $produto) }}" method="POST">
                             @method('PUT')
-                        @endif
+                    @else
+                        {{-- Formulário para CRIAR um novo produto --}}
+                        <form action="{{ route('produtos.store') }}" method="POST">
+                    @endif
+                        @csrf
+                        {{-- ===================================================================== --}}
+                        {{-- |||||||||||||||||||||||| FIM DA ÁREA CORRIGIDA ||||||||||||||||||||| --}}
+                        {{-- ===================================================================== --}}
+
 
                         {{-- DADOS PRINCIPAIS --}}
                         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Dados Principais</h3>
@@ -72,7 +82,7 @@
                             </div>
                         </div>
 
-                        {{-- DADOS FISCAIS --}}
+                        {{-- DADOS FISCAIS (O restante do arquivo continua igual) --}}
                         <h3 class="text-lg font-medium mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">Dados Fiscais</h3>
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4">
                             <div>
@@ -121,7 +131,7 @@
                                 Salvar Produto
                             </x-primary-button>
                         </div>
-                    </form>
+                    </form> {{-- A tag de fechamento agora fica aqui no final --}}
                 </div>
             </div>
         </div>

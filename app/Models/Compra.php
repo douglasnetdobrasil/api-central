@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Scopes\EmpresaScope;
 
 class Compra extends Model
 {
@@ -70,6 +71,11 @@ class Compra extends Model
      public function itens()
     {
         return $this->hasMany(ItemCompra::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new EmpresaScope);
     }
     
 

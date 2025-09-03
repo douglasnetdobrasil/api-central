@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Produto;
 use App\Models\Categoria;
-use App\Models\DadoFiscalProduto; // <-- FALTAVA ESTA LINHA
-use Illuminate\Support\Facades\DB;   // <-- FALTAVA ESTA LINHA
-use Exception; 
-use Illuminate\Support\Facades\Auth;                     // <-- FALTAVA ESTA LINHA
+use App\Models\DadoFiscalProduto;
+use Illuminate\Support\Facades\DB;
+use Exception;
+use Illuminate\Support\Facades\Auth;
 
 class ProdutoController extends Controller
 {
@@ -47,17 +47,9 @@ class ProdutoController extends Controller
     public function create()
     {
         $categorias = Categoria::orderBy('nome')->get();
-    
-        // 1. Cria um "molde" de um novo produto em memória
         $produto = new Produto();
-    
-        // 2. Cria um "molde" dos dados fiscais e define o valor padrão para a origem
         $dadoFiscalPadrao = new DadoFiscalProduto(['origem' => '0']);
-    
-        // 3. Associa os dados fiscais padrão ao molde do produto
         $produto->setRelation('dadosFiscais', $dadoFiscalPadrao);
-    
-        // 4. Envia as variáveis para a view, incluindo o produto com o valor padrão
         return view('produtos.form', compact('produto', 'categorias'));
     }
 
@@ -66,13 +58,11 @@ class ProdutoController extends Controller
      */
     public function store(Request $request)
     {
-        // --- LÓGICA PARA DEFINIR 'ORIGEM' PADRÃO ---
         $fiscalData = $request->input('fiscal', []);
         if (empty($fiscalData['origem'])) {
-            $fiscalData['origem'] = '0'; // Define '0' se estiver vazio
+            $fiscalData['origem'] = '0';
         }
         $request->merge(['fiscal' => $fiscalData]);
-        // --- FIM DA LÓGICA ---
     
         $validatedData = $request->validate([
             'nome' => 'required|string|max:255',
@@ -93,11 +83,33 @@ class ProdutoController extends Controller
        
         DB::beginTransaction();
         try {
-            $produto = Produto::create($validatedData);
+            // Adiciona o empresa_id ao criar o produto
+            $produtoData = array_merge($validatedData, ['empresa_id' => Auth::user()->empresa_id]);
+            $produto = Produto::create($produtoData);
     
             if ($request->has('fiscal')) {
                 $produto->dadosFiscais()->create($request->input('fiscal'));
             }
+
+            // --- INÍCIO: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
+            $estoqueInicial = floatval($validatedData['estoque_atual'] ?? 0);
+
+            if ($estoqueInicial > 0) {
+                DB::table('estoque_movimentos')->insert([
+                    'empresa_id' => Auth::user()->empresa_id,
+                    'produto_id' => $produto->id,
+                    'user_id' => Auth::id(),
+                    'tipo_movimento' => 'entrada_inicial', // Ou 'ajuste_manual_entrada'
+                    'quantidade' => $estoqueInicial,
+                    'saldo_anterior' => 0, // Saldo anterior é zero para um novo produto
+                    'saldo_novo' => $estoqueInicial,
+                    'origem_id' => $produto->id,
+                    'origem_type' => Produto::class,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+            // --- FIM: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
     
             DB::commit();
             return redirect()->route('produtos.index')->with('success', 'Produto cadastrado com sucesso!');
@@ -106,7 +118,6 @@ class ProdutoController extends Controller
             DB::rollBack();
             return back()->with('error', 'Ocorreu um erro: ' . $e->getMessage())->withInput();
         }
-    
     }
     
     /**
@@ -114,7 +125,7 @@ class ProdutoController extends Controller
      */
     public function show(string $id)
     {
-        // Geralmente não usado em CRUDs como este, mas pode ser implementado se necessário
+        // ...
     }
 
     /**
@@ -122,10 +133,7 @@ class ProdutoController extends Controller
      */
     public function edit(Produto $produto)
     {
-        // 1. Busca todas as categorias do banco de dados
         $categorias = Categoria::orderBy('nome')->get();
-    
-        // 2. Envia tanto o $produto a ser editado quanto a lista de $categorias para a view
         return view('produtos.form', compact('produto', 'categorias'));
     }
 
@@ -134,13 +142,11 @@ class ProdutoController extends Controller
      */
     public function update(Request $request, Produto $produto)
     {
-        // --- LÓGICA PARA DEFINIR 'ORIGEM' PADRÃO ---
         $fiscalData = $request->input('fiscal', []);
         if (empty($fiscalData['origem'])) {
-            $fiscalData['origem'] = '0'; // Define '0' se estiver vazio
+            $fiscalData['origem'] = '0';
         }
         $request->merge(['fiscal' => $fiscalData]);
-        // --- FIM DA LÓGICA ---
     
         $validatedData = $request->validate([
             'nome' => 'required|string|max:255',
@@ -161,6 +167,11 @@ class ProdutoController extends Controller
     
         DB::beginTransaction();
         try {
+            // --- INÍCIO: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
+            // 1. Captura o saldo de estoque ANTES da atualização
+            $saldoAnterior = $produto->estoque_atual;
+            // --- FIM: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
+
             $produto->update($validatedData);
     
             if ($request->has('fiscal')) {
@@ -169,6 +180,29 @@ class ProdutoController extends Controller
                     $request->input('fiscal')
                 );
             }
+
+            // --- INÍCIO: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
+            // 2. Pega o saldo NOVO e calcula a diferença
+            $saldoNovo = $produto->fresh()->estoque_atual; // .fresh() garante pegar o valor atualizado do BD
+            $quantidadeMovimentada = $saldoNovo - $saldoAnterior;
+
+            // 3. Se a quantidade mudou, registra o movimento
+            if ($quantidadeMovimentada != 0) {
+                DB::table('estoque_movimentos')->insert([
+                    'empresa_id' => Auth::user()->empresa_id,
+                    'produto_id' => $produto->id,
+                    'user_id' => Auth::id(),
+                    'tipo_movimento' => $quantidadeMovimentada > 0 ? 'ajuste_manual_entrada' : 'ajuste_manual_saida',
+                    'quantidade' => abs($quantidadeMovimentada), // Usa o valor absoluto da movimentação
+                    'saldo_anterior' => $saldoAnterior,
+                    'saldo_novo' => $saldoNovo,
+                    'origem_id' => $produto->id,
+                    'origem_type' => Produto::class,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+            // --- FIM: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
     
             DB::commit();
             return redirect()->route('produtos.index')->with('success', 'Produto atualizado com sucesso!');
@@ -179,49 +213,26 @@ class ProdutoController extends Controller
         }
     }
   
-    /*
     public function search(Request $request)
     {
         $term = $request->query('term');
+
         if (strlen($term) < 2) {
             return response()->json([]);
         }
-    
+
         $produtos = Produto::where('empresa_id', Auth::user()->empresa_id)
-                          ->where('ativo', true)
-                          ->where(function ($query) use ($term) {
-                              $query->where('nome', 'LIKE', "%{$term}%")
+                        ->where('ativo', true)
+                        ->where(function ($query) use ($term) {
+                            $query->where('nome', 'LIKE', "%{$term}%")
                                     ->orWhere('codigo_barras', 'LIKE', "%{$term}%");
-                          })
-                          ->select('id', 'nome', 'preco_venda')
-                          ->limit(15)
-                          ->get();
-    
+                        })
+                        ->select('id', 'nome', 'preco_venda')
+                        ->limit(15)
+                        ->get();
+
         return response()->json($produtos);
     }
-    */
-    public function search(Request $request)
-{
-    $term = $request->query('term');
-
-    if (strlen($term) < 2) {
-        return response()->json([]);
-    }
-
-    $produtos = Produto::where('empresa_id', Auth::user()->empresa_id)
-                      ->where('ativo', true)
-                      ->where(function ($query) use ($term) {
-                          $query->where('nome', 'LIKE', "%{$term}%")
-                                ->orWhere('codigo_barras', 'LIKE', "%{$term}%");
-                      })
-                      ->select('id', 'nome', 'preco_venda')
-                      ->limit(15)
-                      ->get();
-
-    return response()->json($produtos);
-}
-    
-
     
     /**
      * Remove the specified resource from storage.

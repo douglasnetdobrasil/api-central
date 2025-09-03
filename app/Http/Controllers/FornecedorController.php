@@ -59,11 +59,15 @@ class FornecedorController extends Controller
         $validatedData = $request->validate([
             'razao_social' => 'required|string|max:255',
             'nome_fantasia' => 'nullable|string|max:255',
-            // Garante que o CNPJ seja único na tabela
             'cpf_cnpj' => 'required|string|max:20|unique:fornecedores,cpf_cnpj',
             'telefone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
+            // Adicione aqui as regras para os novos campos de endereço se necessário
         ]);
+
+        // **AQUI ESTÁ A MUDANÇA PRINCIPAL**
+        // Adicionamos o ID da empresa do utilizador logado aos dados validados
+        $validatedData['empresa_id'] = auth()->user()->empresa_id;
        
         Fornecedor::create($validatedData);
     
