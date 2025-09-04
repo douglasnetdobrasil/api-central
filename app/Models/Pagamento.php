@@ -13,6 +13,7 @@ class Pagamento extends Model
     protected $table = 'pagamentos';
 
     protected $fillable = [
+        'empresa_id',
         'venda_id',
         'forma_pagamento',
         'valor',

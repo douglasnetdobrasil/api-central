@@ -15,6 +15,7 @@ class EmpresaSeeder extends Seeder
     {
         // Cria a empresa padrão para o sistema
         DB::table('empresas')->insert([
+            'crt' => '1',
             'razao_social' => 'Empresa Padrão LTDA',
             'cnpj' => '99.999.999/0001-91', // CNPJ padrão para testes
             'nicho_negocio' => 'mercado', // Nicho padrão, você pode escolher outro

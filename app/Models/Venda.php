@@ -50,6 +50,12 @@ class Venda extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function nfe()
+{
+    // Uma venda pode ter uma NFe.
+    return $this->hasOne(Nfe::class);
+}
+
     /**
      * Relacionamento: Uma venda pertence a um cliente.
      */

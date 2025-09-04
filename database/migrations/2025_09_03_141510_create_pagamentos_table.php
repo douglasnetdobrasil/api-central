@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('pagamentos', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('empresa_id')->constrained('empresas')->onDelete('cascade');
             $table->foreignId('venda_id')->constrained('vendas')->onDelete('cascade');
             $table->string('forma_pagamento'); // Ex: dinheiro, pix, cartao_credito
             $table->decimal('valor', 10, 2);

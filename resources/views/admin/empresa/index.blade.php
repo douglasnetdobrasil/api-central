@@ -51,7 +51,7 @@
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ Str::ucfirst($empresa->nicho_negocio) }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
                                         {{-- O link de Editar agora aponta para a rota de edição do admin --}}
-                                        <a href="{{ route('empresa.editAdmin', $empresa) }}" class="text-indigo-600 hover:text-indigo-900">Editar</a>
+                                        <a href="{{ route('empresa.edit', $empresa) }}" class="text-indigo-600 hover:text-indigo-900">Editar</a>
                                         <form action="{{ route('empresa.destroy', $empresa) }}" method="POST" class="inline-block" onsubmit="return confirm('Tem certeza que deseja excluir esta empresa?');">
                                             @csrf
                                             @method('DELETE')

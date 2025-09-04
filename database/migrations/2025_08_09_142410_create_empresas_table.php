@@ -14,11 +14,30 @@ return new class extends Migration
         Schema::create('empresas', function (Blueprint $table) {
             $table->id();
             $table->string('razao_social');
+            $table->string('nome_fantasia')->nullable();
             $table->string('cnpj', 18)->unique();
-            
-            // A COLUNA MAIS IMPORTANTE: O "SELETOR DE NICHO"
-            $table->enum('nicho_negocio', ['mercado', 'oficina', 'restaurante', 'loja_roupas'])
-                  ->comment('Define o tipo de negócio para adaptar a interface e as regras');
+            $table->string('ie')->nullable(); // Inscrição Estadual
+            $table->string('im')->nullable();   // Inscrição Municipal
+            $table->integer('crt'); // Código de Regime Tributário
+    
+            // Endereço
+            $table->string('logradouro')->nullable();
+            $table->string('numero')->nullable();
+            $table->string('bairro')->nullable();
+            $table->string('complemento')->nullable();
+            $table->string('cep', 9)->nullable();
+            $table->string('municipio')->nullable();
+            $table->string('uf', 2)->nullable();
+            $table->string('codigo_municipio', 7)->nullable();
+            $table->string('telefone')->nullable();
+            $table->string('website')->nullable();
+            $table->string('logo_path')->nullable();
+    
+            // Certificado Digital
+            $table->text('certificado_a1_path')->nullable();
+            $table->text('certificado_a1_password')->nullable();
+    
+            $table->enum('nicho_negocio', ['mercado', 'oficina', 'restaurante', 'loja_roupas']);
             
             $table->timestamps();
         });

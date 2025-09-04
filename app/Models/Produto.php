@@ -55,9 +55,9 @@ class Produto extends Model
      * Um produto TEM UM conjunto de dados fiscais.
      */
     public function dadosFiscais()
-{
-    return $this->hasOne(DadoFiscalProduto::class, 'produto_id');
-}
+    {
+        return $this->hasOne(DadoFiscalProduto::class);
+    }
 
     /**
      * ADICIONADO: Um produto PERTENCE A UMA Categoria.
@@ -111,6 +111,8 @@ class Produto extends Model
     {
         static::addGlobalScope(new EmpresaScope);
     }
+
+    
 
     public function cotacoes()
 {

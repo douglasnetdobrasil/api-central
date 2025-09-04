@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Venda;
 use App\Models\Orcamento;
 use App\Models\OrcamentoItem;
 use App\Models\Cliente;
@@ -111,6 +112,53 @@ class OrcamentoController extends Controller
         } catch (Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Ocorreu um erro ao salvar o orçamento: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    public function converterEmVenda(Orcamento $orcamento)
+    {
+        if ($orcamento->status !== 'Pendente') {
+            return redirect()->back()->with('error', 'Apenas orçamentos pendentes podem ser convertidos.');
+        }
+        // ... (outras validações que você já tem) ...
+    
+        DB::beginTransaction();
+        try {
+            // 1. Cria a Venda com status 'pendente', SEM baixar o estoque
+            $venda = Venda::create([
+                'empresa_id' => $orcamento->empresa_id,
+                'cliente_id' => $orcamento->cliente_id,
+                'user_id' => auth()->id(),
+                'orcamento_id' => $orcamento->id,
+                'subtotal' => $orcamento->valor_total,
+                'desconto' => 0,
+                'total' => $orcamento->valor_total,
+                'observacoes' => $orcamento->observacoes,
+                'status' => 'pendente', // Status inicial como pendente/rascunho
+            ]);
+    
+            // 2. Apenas copia os itens, sem tocar no estoque
+            foreach ($orcamento->itens as $itemOrcamento) {
+                $venda->items()->create([
+                    'produto_id' => $itemOrcamento->produto_id,
+                    'descricao_produto' => $itemOrcamento->descricao_produto,
+                    'quantidade' => $itemOrcamento->quantidade,
+                    'preco_unitario' => $itemOrcamento->valor_unitario,
+                    'subtotal_item' => $itemOrcamento->subtotal,
+                ]);
+            }
+    
+            // 3. Atualiza o status do Orçamento
+            $orcamento->update(['status' => 'Aprovado']);
+    
+            DB::commit();
+    
+            // 4. Redireciona para a TELA DE EDIÇÃO do novo pedido
+            return redirect()->route('pedidos.edit', $venda)->with('success', 'Orçamento importado. Finalize o pedido abaixo.');
+    
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Erro ao importar orçamento: '. $e->getMessage());
         }
     }
 

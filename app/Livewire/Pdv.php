@@ -7,8 +7,7 @@ use App\Models\Produto;
 use Livewire\Component;
 use Illuminate\Support\Facades\DB;
 use App\Models\Venda;
-
-
+use App\Models\Pagamento;
 
 class Pdv extends Component
 {
@@ -34,6 +33,26 @@ class Pdv extends Component
     public bool $showDesconto = false;
     public string $textoBotaoFinalizar = 'Finalizar Venda';
 
+    // Bloco 4: Pagamentos
+    public bool $showPagamentoModal = false;
+    public array $pagamentos = [];
+    public float $valorRecebido = 0;
+    public float $troco = 0;
+    public float $faltaPagar = 0;
+    public string $formaPagamentoSelecionada = 'dinheiro';
+    public $valorPagamentoAtual = null;
+
+    public function mount()
+    {
+        $config = DB::table('configuracoes')
+                    ->where('chave', 'baixar_estoque_pdv')
+                    ->first();
+
+        if ($config && $config->valor === 'false') {
+            $this->textoBotaoFinalizar = 'Finalizar Pré-venda';
+        }
+    }
+    
     // --- MÉTODOS DE NAVEGAÇÃO POR TECLADO ---
     public function selecionarClienteComEnter()
     {
@@ -71,18 +90,6 @@ class Pdv extends Component
         $this->clienteSearch = '';
         $this->clientesEncontrados = [];
     }
-
-    public function mount()
-    {
-        $config = DB::table('configuracoes')
-                    ->where('chave', 'baixar_estoque_pdv')
-                    ->first();
-
-        // Se a configuração for 'false', muda o texto do botão
-        if ($config && $config->valor === 'false') {
-            $this->textoBotaoFinalizar = 'Finalizar Pré-venda';
-        }
-    }
     
     public function removerCliente()
     {
@@ -96,7 +103,7 @@ class Pdv extends Component
             $this->produtosEncontrados = Produto::where('id', $value)
                 ->orWhere('nome', 'like', '%' . $value . '%')
                 ->orWhere('codigo_barras', $value)
-                ->where('estoque_atual', '>', 0) // <-- CORRIGIDO
+                ->where('estoque_atual', '>', 0)
                 ->limit(5)->get();
         } else {
             $this->produtosEncontrados = [];
@@ -108,7 +115,6 @@ class Pdv extends Component
         $cartIndex = collect($this->cart)->search(fn ($item) => $item['id'] === $produto->id);
     
         if ($cartIndex !== false) {
-            // A lógica de aumentar a quantidade já está no método aumentarQuantidade()
             $this->aumentarQuantidade($cartIndex);
         } else {
             $this->cart[] = [
@@ -116,7 +122,7 @@ class Pdv extends Component
                 'nome' => $produto->nome,
                 'preco' => $produto->preco_venda,
                 'quantidade' => 1,
-                'estoque_atual' => $produto->estoque_atual, // <-- CORRIGIDO
+                'estoque_atual' => $produto->estoque_atual,
             ];
         }
     
@@ -148,7 +154,7 @@ class Pdv extends Component
         }
     }
 
-    // --- MÉTODOS DE CÁLCULO E FINALIZAÇÃO ---
+    // --- MÉTODOS DE CÁLCULO, DESCONTO E FINALIZAÇÃO ---
     public function toggleDesconto()
     {
         $this->showDesconto = !$this->showDesconto;
@@ -178,13 +184,10 @@ class Pdv extends Component
     
     public function calcularTotais()
     {
-        // VERSÃO CORRIGIDA E ROBUSTA DO MÉTODO
         $this->subtotal = 0;
         foreach ($this->cart as $index => $item) {
-            // Primeiro, calcula e define a chave 'total_item'
             $total_item = $item['preco'] * $item['quantidade'];
             $this->cart[$index]['total_item'] = $total_item;
-            // Depois, soma ao subtotal
             $this->subtotal += $total_item;
         }
 
@@ -198,31 +201,40 @@ class Pdv extends Component
         $this->descontoCalculado = min($this->descontoCalculado, $this->subtotal);
         $this->total = $this->subtotal - $this->descontoCalculado;
     }
-
+    
+    /**
+     * Ponto de entrada ao clicar no botão "Finalizar Venda".
+     * Agora ele apenas decide se abre o modal ou salva uma pré-venda.
+     */
     public function finalizarVenda()
     {
-        // 1. Validação inicial
         if (empty($this->cart)) {
             session()->flash('error', 'Adicione pelo menos um produto à venda.');
             return;
         }
 
-        // 2. Ler a configuração do sistema
-        $config = DB::table('configuracoes')
-                    ->where('chave', 'baixar_estoque_pdv')
-                    ->first();
-
-        // LÓGICA MELHORADA: Aceita 'true' ou o número 1 como verdadeiro.
-        // Se a configuração não existir, assume 'true' como padrão.
+        $config = DB::table('configuracoes')->where('chave', 'baixar_estoque_pdv')->first();
         $baixarEstoqueAgora = !$config || $config->valor === 'true' || $config->valor === '1';
-        
-        // --- DEBUG: Mensagem para confirmar a ação ---
-        // session()->flash('info', 'A configuração para baixar estoque é: ' . ($baixarEstoqueAgora ? 'VERDADEIRO' : 'FALSO'));
-        // return; // Pode descomentar estas duas linhas temporariamente para testar apenas a configuração
 
+        if ($baixarEstoqueAgora) {
+            // Ação 1: É VENDA DIRETA -> Prepara os dados e ABRE O MODAL
+            $this->resetarPagamentos();
+            $this->faltaPagar = $this->total;
+            $this->valorPagamentoAtual = number_format($this->total, 2, '.', '');
+            $this->showPagamentoModal = true;
+        } else {
+            // Ação 2: É PRÉ-VENDA -> Salva sem pedir pagamento
+            $this->salvarPreVenda();
+        }
+    }
+
+    /**
+     * Contém a lógica para salvar a venda como "pendente" sem baixar o estoque.
+     */
+    private function salvarPreVenda()
+    {
         DB::beginTransaction();
         try {
-            // 3. Criar a Venda
             $venda = Venda::create([
                 'empresa_id' => auth()->user()->empresa_id,
                 'user_id' => auth()->id(),
@@ -231,65 +243,144 @@ class Pdv extends Component
                 'desconto' => $this->descontoCalculado,
                 'total' => $this->total,
                 'observacoes' => $this->observacoes,
-                'status' => $baixarEstoqueAgora ? 'concluida' : 'pendente',
+                'status' => 'pendente',
             ]);
 
-            // 4. Salvar Itens e movimentar o estoque (se configurado)
-            if ($baixarEstoqueAgora) {
-                foreach ($this->cart as $item) {
-                    $venda->items()->create([
-                        'produto_id' => $item['id'],
-                        'descricao_produto' => $item['nome'],
-                        'quantidade' => $item['quantidade'],
-                        'preco_unitario' => $item['preco'],
-                        'subtotal_item' => $item['total_item'],
-                    ]);
+            foreach ($this->cart as $item) {
+                $venda->items()->create([
+                    'produto_id' => $item['id'],
+                    'descricao_produto' => $item['nome'],
+                    'quantidade' => $item['quantidade'],
+                    'preco_unitario' => $item['preco'],
+                    'subtotal_item' => $item['total_item'],
+                ]);
+            }
 
-                    $produto = Produto::find($item['id']);
-                    if ($produto) {
-                        $saldoAnterior = $produto->estoque_atual;
-                        $produto->decrement('estoque_atual', $item['quantidade']);
-                        $saldoNovo = $produto->fresh()->estoque_atual; // .fresh() para garantir que pega o valor atualizado do BD
+            DB::commit();
+            session()->flash('success', 'Pré-venda salva com sucesso!');
+            return redirect()->route('pedidos.index');
 
-                        DB::table('estoque_movimentos')->insert([
-                            'empresa_id' => auth()->user()->empresa_id,
-                            'produto_id' => $produto->id,
-                            'user_id' => auth()->id(),
-                            'tipo_movimento' => 'saida_venda',
-                            'quantidade' => $item['quantidade'],
-                            'saldo_anterior' => $saldoAnterior,
-                            'saldo_novo' => $saldoNovo,
-                            'origem_id' => $venda->id,
-                            'origem_type' => Venda::class,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
-                    }
-                }
-            } else {
-                // Se não for para baixar estoque, apenas salva os itens sem tocar no estoque
-                 foreach ($this->cart as $item) {
-                    $venda->items()->create([
-                        'produto_id' => $item['id'],
-                        'descricao_produto' => $item['nome'],
+        } catch (\Exception $e) {
+            DB::rollBack();
+            session()->flash('error', 'Erro ao salvar pré-venda: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Chamado pelo botão "Confirmar Venda" DENTRO DO MODAL.
+     * Salva a venda, os pagamentos e baixa o estoque.
+     */
+    public function confirmarVendaComPagamentos()
+    {
+        if ($this->faltaPagar > 0) {
+             session()->flash('error_modal', 'O valor recebido é menor que o total da venda.');
+             return;
+        }
+
+        DB::beginTransaction();
+        try {
+            $venda = Venda::create([
+                'empresa_id' => auth()->user()->empresa_id,
+                'user_id' => auth()->id(),
+                'cliente_id' => $this->clienteSelecionado?->id,
+                'subtotal' => $this->subtotal,
+                'desconto' => $this->descontoCalculado,
+                'total' => $this->total,
+                'observacoes' => $this->observacoes,
+                'status' => 'concluida',
+            ]);
+
+            foreach($this->pagamentos as $pagamento) {
+                $venda->pagamentos()->create([
+                    'empresa_id' => $venda->empresa_id,
+                    'forma_pagamento' => $pagamento['forma'],
+                    'valor' => $pagamento['valor'],
+                    'parcelas' => 1,
+                ]);
+            }
+            
+            foreach ($this->cart as $item) {
+                $venda->items()->create([
+                    'produto_id' => $item['id'],
+                    'descricao_produto' => $item['nome'],
+                    'quantidade' => $item['quantidade'],
+                    'preco_unitario' => $item['preco'],
+                    'subtotal_item' => $item['total_item'],
+                ]);
+
+                $produto = Produto::find($item['id']);
+                if ($produto) {
+                    $saldoAnterior = $produto->estoque_atual;
+                    $produto->decrement('estoque_atual', $item['quantidade']);
+                    $saldoNovo = $produto->fresh()->estoque_atual;
+
+                    DB::table('estoque_movimentos')->insert([
+                        'empresa_id' => auth()->user()->empresa_id,
+                        'produto_id' => $produto->id,
+                        'user_id' => auth()->id(),
+                        'tipo_movimento' => 'saida_venda',
                         'quantidade' => $item['quantidade'],
-                        'preco_unitario' => $item['preco'],
-                        'subtotal_item' => $item['total_item'],
+                        'saldo_anterior' => $saldoAnterior,
+                        'saldo_novo' => $saldoNovo,
+                        'origem_id' => $venda->id,
+                        'origem_type' => Venda::class,
+                        'created_at' => now(),
+                        'updated_at' => now(),
                     ]);
                 }
             }
 
-
             DB::commit();
-
             session()->flash('success', 'Venda finalizada com sucesso!');
             return redirect()->route('pedidos.index');
 
         } catch (\Exception $e) {
             DB::rollBack();
-            // MENSAGEM DE ERRO DETALHADA
             session()->flash('error', 'ERRO AO FINALIZAR VENDA: ' . $e->getMessage());
         }
+    }
+
+    // --- MÉTODOS AUXILIARES DE PAGAMENTO ---
+    public function adicionarPagamento()
+    {
+        $valor = (float)str_replace(',', '.', $this->valorPagamentoAtual);
+
+        if ($valor <= 0.009) return;
+
+        $this->pagamentos[] = [
+            'forma' => $this->formaPagamentoSelecionada,
+            'valor' => $valor,
+        ];
+        $this->recalcularValoresPagamento();
+    }
+
+    public function removerPagamento($index)
+    {
+        unset($this->pagamentos[$index]);
+        $this->pagamentos = array_values($this->pagamentos);
+        $this->recalcularValoresPagamento();
+    }
+
+    private function recalcularValoresPagamento()
+    {
+        $this->valorRecebido = collect($this->pagamentos)->sum('valor');
+        $this->faltaPagar = $this->total - $this->valorRecebido;
+        $this->troco = 0;
+
+        if ($this->faltaPagar < 0) {
+            $this->troco = abs($this->faltaPagar);
+            $this->faltaPagar = 0;
+        }
+
+        $this->valorPagamentoAtual = number_format($this->faltaPagar > 0 ? $this->faltaPagar : 0, 2, '.', '');
+    }
+
+    private function resetarPagamentos()
+    {
+        $this->pagamentos = [];
+        $this->valorRecebido = 0;
+        $this->troco = 0;
+        $this->faltaPagar = $this->total;
     }
 
     public function render()
