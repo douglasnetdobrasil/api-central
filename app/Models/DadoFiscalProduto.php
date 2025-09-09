@@ -26,6 +26,7 @@ class DadoFiscalProduto extends Model
         'pis_cst',
         'cofins_cst',
         'csosn',
+        'empresa_id',
     ];
 
     public function produto()

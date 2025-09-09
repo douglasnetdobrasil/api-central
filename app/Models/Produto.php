@@ -27,7 +27,8 @@ class Produto extends Model
         'detalhe_type', // <-- ESTA É A LINHA CRUCIAL QUE FALTAVA
         'preco_custo',
         'categoria_id',
-        'empresa_id'
+        'empresa_id',
+        'unidade',
     ];
 
     /**

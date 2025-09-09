@@ -9,7 +9,8 @@
                     <x-secondary-button>Importar Orçamento</x-secondary-button>
                 </a>
                 
-                <a href="{{-- Rota para criar um novo pedido direto --}}">
+                {{-- CORREÇÃO APLICADA AQUI --}}
+                <a href="{{ route('pedidos.create') }}">
                     <x-primary-button>Novo Pedido</x-primary-button>
                 </a>
             </div>
@@ -46,7 +47,8 @@
                                         @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <a href="#" class="text-indigo-600 hover:text-indigo-900">Ver</a>
+                                        {{-- CORREÇÃO APLICADA AQUI --}}
+                                        <a href="{{ route('pedidos.edit', $pedido) }}" class="text-indigo-600 hover:text-indigo-900">Ver / Editar</a>
                                     </td>
                                 </tr>
                             @empty

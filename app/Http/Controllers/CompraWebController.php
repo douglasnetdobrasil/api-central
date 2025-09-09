@@ -15,6 +15,8 @@ use App\Models\DetalhesItemMercado;
 use App\Models\UnidadeMedida;
 use App\Models\Categoria;
 use Illuminate\Support\Facades\Session;
+use App\Models\ConfiguracaoFiscalPadrao;
+use App\Models\DadoFiscalProduto;
 use Exception;
 
 class CompraWebController extends Controller
@@ -49,111 +51,111 @@ class CompraWebController extends Controller
     }
 
     public function importarXml(Request $request)
-{
-    $request->validate(['xml_file' => 'required|file|mimes:xml,txt']);
+    {
+        $request->validate(['xml_file' => 'required|file|mimes:xml,txt']);
 
-    try {
-        $xmlContent = $request->file('xml_file')->getContent();
-        $xml = simplexml_load_string($xmlContent);
-        if ($xml === false) throw new Exception("Não foi possível carregar o conteúdo do XML.");
-        
-        $xml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-        $infNFe = $xml->xpath('//nfe:infNFe')[0];
-        if (!$infNFe) throw new Exception("Estrutura do XML inválida.");
-
-        $chaveAcesso = str_replace('NFe', '', (string)$infNFe->attributes()->Id);
-        if (Compra::where('chave_acesso_nfe', $chaveAcesso)->exists()) {
-            return back()->with('error', "Atenção: A Nota Fiscal (Chave: {$chaveAcesso}) já foi importada.");
-        }
-
-        $cnpjFornecedor = (string)$infNFe->emit->CNPJ;
-        $fornecedor = Fornecedor::where('cpf_cnpj', $cnpjFornecedor)->first();
-
-        // Carrega todas as configurações e margens necessárias de uma vez
-        $configuracoes = Configuracao::pluck('valor', 'chave')->all();
-        $margensCategorias = Categoria::pluck('margem_lucro', 'id');
-        $margemPadrao = (float)($configuracoes['margem_lucro_padrao'] ?? 0);
-        $categoriaPadraoId = $configuracoes['categoria_padrao_id'] ?? 1; // Usa ID 1 como fallback
-
-        $itens = [];
-        foreach ($xml->xpath('//nfe:det') as $itemXml) {
-            $vinculo = null;
-            if ($fornecedor) {
-                $vinculo = ProdutoFornecedor::with('produto.categoria')
-                    ->where('fornecedor_id', $fornecedor->id)
-                    ->where('codigo_produto_fornecedor', (string)$itemXml->prod->cProd)
-                    ->first();
-            }
-
-            $precoCustoNota = (float)$itemXml->prod->vUnCom;
-
-            // ===== LÓGICA DAS CORES (Amarelo, Azul, Vermelho) =====
-            $statusItem = 'normal';
-            if ($vinculo && $vinculo->produto) {
-                $statusItem = 'vinculo_encontrado';
-                if (abs($vinculo->produto->preco_custo - $precoCustoNota) > 0.01) {
-                    $statusItem = 'custo_alterado';
-                }
-            } else {
-                $statusItem = 'novo';
-            }
-            // =======================================================
-
-            // ===== HIERARQUIA DE MARGENS PARA SUGESTÃO DE PREÇO =====
-            $margemAplicada = $margemPadrao; // 3º Padrão
-            if ($vinculo && $vinculo->produto) {
-                $produtoVinculado = $vinculo->produto;
-                $categoriaDoProduto = $produtoVinculado->categoria;
-                // 1º Margem do Produto
-                if (isset($produtoVinculado->margem_lucro)) {
-                    $margemAplicada = (float)$produtoVinculado->margem_lucro;
-                } 
-                // 2º Margem da Categoria
-                elseif ($categoriaDoProduto && isset($categoriaDoProduto->margem_lucro)) {
-                    $margemAplicada = (float)$categoriaDoProduto->margem_lucro;
-                }
-            } else {
-                // Se o produto é NOVO, já busca a margem da categoria padrão
-                $margemAplicada = $margensCategorias[$categoriaPadraoId] ?? $margemPadrao;
-            }
-            // ========================================================
+        try {
+            $xmlContent = $request->file('xml_file')->getContent();
+            $xml = simplexml_load_string($xmlContent);
+            if ($xml === false) throw new Exception("Não foi possível carregar o conteúdo do XML.");
             
-            $precoVendaSugerido = $precoCustoNota * (1 + ($margemAplicada / 100));
-
-            $itens[] = [
-                'descricao_nota' => (string)$itemXml->prod->xProd,
-                'codigo_fornecedor' => (string)$itemXml->prod->cProd,
-                'ean' => (string)$itemXml->prod->cEAN,
-                'ncm' => (string)$itemXml->prod->NCM,
-                'cfop' => (string)$itemXml->prod->CFOP,
-                'unidade' => (string)$itemXml->prod->uCom,
-                'quantidade' => (float)$itemXml->prod->qCom,
-                'preco_custo' => $precoCustoNota,
-                'subtotal' => (float)$itemXml->prod->vProd,
-                'vinculo_existente' => $vinculo ? $vinculo->produto->toArray() : null,
-                'preco_venda_sugerido' => number_format($precoVendaSugerido, 2, '.', ''),
-                'status' => $statusItem,
+            $xml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+            $infNFe = $xml->xpath('//nfe:infNFe')[0];
+            if (!$infNFe) throw new Exception("Estrutura do XML inválida.");
+    
+            $chaveAcesso = str_replace('NFe', '', (string)$infNFe->attributes()->Id);
+            if (Compra::where('chave_acesso_nfe', $chaveAcesso)->exists()) {
+                return back()->with('error', "Atenção: A Nota Fiscal (Chave: {$chaveAcesso}) já foi importada.");
+            }
+    
+            $cnpjFornecedor = (string)$infNFe->emit->CNPJ;
+            $fornecedor = Fornecedor::where('cpf_cnpj', $cnpjFornecedor)->first();
+    
+            // Carrega todas as configurações e margens necessárias de uma vez
+            $configuracoes = Configuracao::pluck('valor', 'chave')->all();
+            $margensCategorias = Categoria::pluck('margem_lucro', 'id');
+            $margemPadrao = (float)($configuracoes['margem_lucro_padrao'] ?? 0);
+            $categoriaPadraoId = $configuracoes['categoria_padrao_id'] ?? 1; // Usa ID 1 como fallback
+    
+            $itens = [];
+            foreach ($xml->xpath('//nfe:det') as $itemXml) {
+                $vinculo = null;
+                if ($fornecedor) {
+                    $vinculo = ProdutoFornecedor::with('produto.categoria')
+                        ->where('fornecedor_id', $fornecedor->id)
+                        ->where('codigo_produto_fornecedor', (string)$itemXml->prod->cProd)
+                        ->first();
+                }
+    
+                $precoCustoNota = (float)$itemXml->prod->vUnCom;
+    
+                // ===== LÓGICA DAS CORES (Amarelo, Azul, Vermelho) =====
+                $statusItem = 'normal';
+                if ($vinculo && $vinculo->produto) {
+                    $statusItem = 'vinculo_encontrado';
+                    if (abs($vinculo->produto->preco_custo - $precoCustoNota) > 0.01) {
+                        $statusItem = 'custo_alterado';
+                    }
+                } else {
+                    $statusItem = 'novo';
+                }
+                // =======================================================
+    
+                // ===== HIERARQUIA DE MARGENS PARA SUGESTÃO DE PREÇO =====
+                $margemAplicada = $margemPadrao; // 3º Padrão
+                if ($vinculo && $vinculo->produto) {
+                    $produtoVinculado = $vinculo->produto;
+                    $categoriaDoProduto = $produtoVinculado->categoria;
+                    // 1º Margem do Produto
+                    if (isset($produtoVinculado->margem_lucro)) {
+                        $margemAplicada = (float)$produtoVinculado->margem_lucro;
+                    } 
+                    // 2º Margem da Categoria
+                    elseif ($categoriaDoProduto && isset($categoriaDoProduto->margem_lucro)) {
+                        $margemAplicada = (float)$categoriaDoProduto->margem_lucro;
+                    }
+                } else {
+                    // Se o produto é NOVO, já busca a margem da categoria padrão
+                    $margemAplicada = $margensCategorias[$categoriaPadraoId] ?? $margemPadrao;
+                }
+                // ========================================================
+                
+                $precoVendaSugerido = $precoCustoNota * (1 + ($margemAplicada / 100));
+    
+                $itens[] = [
+                    'descricao_nota' => (string)$itemXml->prod->xProd,
+                    'codigo_fornecedor' => (string)$itemXml->prod->cProd,
+                    'ean' => (string)$itemXml->prod->cEAN,
+                    'ncm' => (string)$itemXml->prod->NCM,
+                    'cfop' => (string)$itemXml->prod->CFOP,
+                    'unidade' => (string)$itemXml->prod->uCom,
+                    'quantidade' => (float)$itemXml->prod->qCom,
+                    'preco_custo' => $precoCustoNota,
+                    'subtotal' => (float)$itemXml->prod->vProd,
+                    'vinculo_existente' => $vinculo ? $vinculo->produto->toArray() : null,
+                    'preco_venda_sugerido' => number_format($precoVendaSugerido, 2, '.', ''),
+                    'status' => $statusItem,
+                ];
+            }
+    
+            $dadosNFe = [
+                'chave_acesso' => $chaveAcesso,
+                'numero_nota' => (string)$infNFe->ide->nNF,
+                'data_emissao' => new \DateTime((string)$infNFe->ide->dhEmi),
+                'valor_total' => (float)$infNFe->total->ICMSTot->vNF,
+                'fornecedor' => ['cnpj' => $cnpjFornecedor, 'razao_social' => (string)$infNFe->emit->xNome, 'existente' => !is_null($fornecedor)],
+                'itens' => $itens,
             ];
+    
+            Session::put('importacao_nfe', $dadosNFe);
+            return redirect()->route('compras.revisarImportacao');
+    
+        } catch (Exception $e) {
+            return back()->with('error', 'Falha ao analisar o XML: ' . $e->getMessage());
         }
-
-        $dadosNFe = [
-            'chave_acesso' => $chaveAcesso,
-            'numero_nota' => (string)$infNFe->ide->nNF,
-            'data_emissao' => new \DateTime((string)$infNFe->ide->dhEmi),
-            'valor_total' => (float)$infNFe->total->ICMSTot->vNF,
-            'fornecedor' => ['cnpj' => $cnpjFornecedor, 'razao_social' => (string)$infNFe->emit->xNome, 'existente' => !is_null($fornecedor)],
-            'itens' => $itens,
-        ];
-
-        Session::put('importacao_nfe', $dadosNFe);
-        return redirect()->route('compras.revisarImportacao');
-
-    } catch (Exception $e) {
-        return back()->with('error', 'Falha ao analisar o XML: ' . $e->getMessage());
     }
-}
 
-public function revisarImportacao()
+    public function revisarImportacao()
     {
         // 1. Pega os dados da NFe que foram salvos na sessão pelo método importarXml
         $dadosNFe = Session::get('importacao_nfe');
@@ -178,7 +180,23 @@ public function revisarImportacao()
     
         DB::beginTransaction();
         try {
-            // ... (código inicial do método sem alterações)
+            $empresaId = Auth::user()->empresa_id;
+
+            // ===== INÍCIO DA NOVA LÓGICA DE CONFIGURAÇÃO FISCAL =====
+            // 1. Busca na tabela 'configuracoes' qual o ID do perfil fiscal padrão ativo.
+            $perfilAtivoId = Configuracao::where('empresa_id', $empresaId)
+                                         ->where('chave', 'dados_fiscais_padrao')
+                                         ->value('valor');
+
+            // 2. Com o ID, busca os dados do perfil fiscal na tabela específica.
+            $configFiscalPadrao = null;
+            if ($perfilAtivoId) {
+                $configFiscalPadrao = ConfiguracaoFiscalPadrao::where('id', $perfilAtivoId)
+                                                              ->where('empresa_id', $empresaId) // Checagem de segurança
+                                                              ->first();
+            }
+            // ===== FIM DA NOVA LÓGICA DE CONFIGURAÇÃO FISCAL =====
+
             $configuracoes = Configuracao::pluck('valor', 'chave')->all();
             $margensCategorias = Categoria::pluck('margem_lucro', 'id');
             $margemPadrao = (float)($configuracoes['margem_lucro_padrao'] ?? 0);
@@ -203,7 +221,6 @@ public function revisarImportacao()
             ]);
     
             foreach ($dadosNFeDaSessao['itens'] as $index => $itemOriginal) {
-                // ... (código de cálculo de margem e preço sem alterações)
                 $dadosModificados = $request->input("itens.$index", []);
                 $categoriaFinal = $dadosModificados['categoria_id'] ?? $itemOriginal['vinculo_existente']['categoria_id'] ?? $categoriaPadraoId;
                 $precoCusto = (float)$itemOriginal['preco_custo'];
@@ -217,9 +234,8 @@ public function revisarImportacao()
                     $precoVendaFinal = $precoCusto * (1 + ($margemFinal / 100));
                 }
 
-                // ===== ALTERAÇÃO PRINCIPAL AQUI =====
                 $dadosFinaisProduto = [
-                    'empresa_id' => Auth::user()->empresa_id, // <-- ADIÇÃO 1: Inclui o ID da empresa nos dados
+                    'empresa_id' => Auth::user()->empresa_id,
                     'nome' => $dadosModificados['nome'] ?? $itemOriginal['descricao_nota'],
                     'categoria_id' => $categoriaFinal,
                     'preco_venda' => $precoVendaFinal,
@@ -233,24 +249,38 @@ public function revisarImportacao()
                 $produtoFinal = null;
     
                 if ($produtoIdVinculado) {
-                    // Aqui, a busca já deve estar protegida pelo Global Scope que adicionámos ao modelo Produto
                     if ($produto = Produto::find($produtoIdVinculado)) {
                         $produto->update($dadosFinaisProduto);
                         $produtoFinal = $produto;
                     }
                 } else {
-                    // ===== ALTERAÇÃO NA CRIAÇÃO/BUSCA DO PRODUTO =====
                     $produtoFinal = Produto::updateOrCreate(
                         [
                             'codigo_barras' => $dadosFinaisProduto['codigo_barras'],
-                            'empresa_id' => Auth::user()->empresa_id // <-- ADIÇÃO 2: Usa empresa_id na busca para evitar conflitos
+                            'empresa_id' => Auth::user()->empresa_id
                         ],
-                        $dadosFinaisProduto // O empresa_id já está neste array para o caso de criação
+                        $dadosFinaisProduto
                     );
                 }
     
                 if ($produtoFinal) {
-                    // ... (resto do código para incrementar estoque, salvar item_compra, etc., continua igual)
+                    // ===== INÍCIO DA LÓGICA DE APLICAÇÃO DOS DADOS FISCAIS PADRÃO =====
+                    // Se o produto foi criado AGORA (não existia) E existe um perfil fiscal configurado...
+                    if ($produtoFinal->wasRecentlyCreated && $configFiscalPadrao) {
+                        DadoFiscalProduto::create([
+                            'produto_id' => $produtoFinal->id,
+                            'empresa_id' => $empresaId,
+                            'ncm' => $itemOriginal['ncm'] ?? $configFiscalPadrao->ncm_padrao,
+                            'origem' => $configFiscalPadrao->origem_padrao, // Prioriza o padrão
+                            'cfop' => $configFiscalPadrao->cfop_padrao, // Prioriza o CFOP de Venda padrão
+                            'csosn' => $configFiscalPadrao->csosn_padrao,
+                            'icms_cst' => $configFiscalPadrao->icms_cst_padrao,
+                            'pis_cst' => $configFiscalPadrao->pis_cst_padrao,
+                            'cofins_cst' => $configFiscalPadrao->cofins_cst_padrao,
+                        ]);
+                    }
+                    // ===== FIM DA LÓGICA DE APLICAÇÃO DOS DADOS FISCAIS PADRÃO =====
+
                     $produtoFinal->increment('estoque_atual', (float)$itemOriginal['quantidade']);
                     ProdutoFornecedor::updateOrCreate(
                         ['fornecedor_id' => $fornecedor->id, 'codigo_produto_fornecedor' => $itemOriginal['codigo_fornecedor']],
@@ -274,11 +304,82 @@ public function revisarImportacao()
             return back()->with('error', 'Ocorreu um erro ao salvar a importação: ' . $e->getMessage());
         }
     }
+
+    public function store(Request $request)
+    {
+        // 1. Valida os dados do cabeçalho da nota e o array de itens
+        $validatedData = $request->validate([
+            'fornecedor_id' => 'required|exists:fornecedores,id',
+            'numero_nota' => 'required|string|max:255',
+            'data_emissao' => 'required|date',
+            'items' => 'required|array|min:1',
+            'items.*.produto_id' => 'required|exists:produtos,id',
+            'items.*.quantidade' => 'required|numeric|min:0.01',
+            'items.*.preco_custo' => 'required|numeric|min:0',
+        ]);
+
+        // Inicia uma transação para garantir a integridade dos dados
+        DB::beginTransaction();
+        try {
+            // 2. Cria o cabeçalho da Compra
+            $compra = Compra::create([
+                'fornecedor_id' => $validatedData['fornecedor_id'],
+                'numero_nota' => $validatedData['numero_nota'],
+                'data_emissao' => $validatedData['data_emissao'],
+                'empresa_id' => Auth::user()->empresa_id,
+                'status' => 'concluida', // A nota já entra como concluída
+            ]);
+
+            $valorTotalNota = 0;
+
+            // 3. Percorre e salva cada item da compra
+            foreach ($validatedData['items'] as $itemData) {
+                $subtotal = $itemData['quantidade'] * $itemData['preco_custo'];
+                $valorTotalNota += $subtotal;
+
+                ItemCompra::create([
+                    'compra_id' => $compra->id,
+                    'produto_id' => $itemData['produto_id'],
+                    'quantidade' => $itemData['quantidade'],
+                    'preco_custo_nota' => $itemData['preco_custo'],
+                    'subtotal' => $subtotal,
+                ]);
+
+                // 4. Atualiza o estoque e o preço de custo do produto principal
+                $produto = Produto::find($itemData['produto_id']);
+                if ($produto) {
+                    $produto->increment('estoque_atual', $itemData['quantidade']);
+                    // Atualiza o preço de custo do produto para o valor desta última compra
+                    $produto->update(['preco_custo' => $itemData['preco_custo']]);
+                }
+            }
+            
+            // 5. Atualiza o valor total na nota principal
+            $compra->update(['valor_total_nota' => $valorTotalNota]);
+
+            // Se tudo correu bem, confirma as operações no banco
+            DB::commit();
+
+            return redirect()->route('compras.index')->with('success', 'Compra manual lançada com sucesso!');
+
+        } catch (\Exception $e) {
+            // Se algo deu errado, desfaz todas as operações
+            DB::rollBack();
+            return back()->with('error', 'Ocorreu um erro ao salvar a compra: ' . $e->getMessage())->withInput();
+        }
+    }
+    
+    public function edit(Compra $compra)
+    {
+        $compra->load('itens'); 
+        $produtos = Produto::orderBy('nome')->get();
+        return view('compras.edit', compact('compra', 'produtos'));
+    }
+
     public function update(Request $request, string $id)
     {
         $request->validate([
             'itens' => 'required|array',
-            // CORREÇÃO 3: Altere 'preco_entrada' para 'preco_venda' aqui
             'itens.*.preco_venda' => 'required|numeric', 
             'itens.*.categoria_id' => 'nullable|exists:categorias,id'
         ]);
@@ -289,7 +390,6 @@ public function revisarImportacao()
     
                 foreach ($request->itens as $itemId => $itemData) {
                     // ...
-                    // Lembre-se de usar $itemData['preco_venda'] no resto deste método se necessário
                 }
                 // ...
             });
@@ -297,74 +397,6 @@ public function revisarImportacao()
         } catch (Exception $e) {
             // ...
         }
-    }
-
-    public function store(Request $request)
-{
-    // 1. Valida os dados do cabeçalho da nota e o array de itens
-    $validatedData = $request->validate([
-        'fornecedor_id' => 'required|exists:fornecedores,id',
-        'numero_nota' => 'required|string|max:255',
-        'data_emissao' => 'required|date',
-        'items' => 'required|array|min:1',
-        'items.*.produto_id' => 'required|exists:produtos,id',
-        'items.*.quantidade' => 'required|numeric|min:0.01',
-        'items.*.preco_custo' => 'required|numeric|min:0',
-    ]);
-
-    // Inicia uma transação para garantir a integridade dos dados
-    DB::beginTransaction();
-    try {
-        // 2. Cria o cabeçalho da Compra
-        $compra = Compra::create([
-            'fornecedor_id' => $validatedData['fornecedor_id'],
-            'numero_nota' => $validatedData['numero_nota'],
-            'data_emissao' => $validatedData['data_emissao'],
-            'empresa_id' => Auth::user()->empresa_id,
-            'status' => 'concluida', // A nota já entra como concluída
-        ]);
-
-        $valorTotalNota = 0;
-
-        // 3. Percorre e salva cada item da compra
-        foreach ($validatedData['items'] as $itemData) {
-            $subtotal = $itemData['quantidade'] * $itemData['preco_custo'];
-            $valorTotalNota += $subtotal;
-
-            ItemCompra::create([
-                'compra_id' => $compra->id,
-                'produto_id' => $itemData['produto_id'],
-                'quantidade' => $itemData['quantidade'],
-                'preco_custo_nota' => $itemData['preco_custo'],
-                'subtotal' => $subtotal,
-            ]);
-
-            // 4. Atualiza o estoque e o preço de custo do produto principal
-            $produto = Produto::find($itemData['produto_id']);
-            if ($produto) {
-                $produto->increment('estoque_atual', $itemData['quantidade']);
-                // Atualiza o preço de custo do produto para o valor desta última compra
-                $produto->update(['preco_custo' => $itemData['preco_custo']]);
-            }
-        }
-        
-        // 5. Atualiza o valor total na nota principal
-        $compra->update(['valor_total_nota' => $valorTotalNota]);
-
-        // Se tudo correu bem, confirma as operações no banco
-        DB::commit();
-
-        return redirect()->route('compras.index')->with('success', 'Compra manual lançada com sucesso!');
-
-    } catch (\Exception $e) {
-        // Se algo deu errado, desfaz todas as operações
-        DB::rollBack();
-        return back()->with('error', 'Ocorreu um erro ao salvar a compra: ' . $e->getMessage())->withInput();
-    }
-}
-    private function vincularOuCriarProduto(Fornecedor $fornecedor, ItemCompra $itemCompra, string $unidadeComercialXml): void
-    {
-        // ... (código existente sem alterações)
     }
 
     public function destroy(Compra $compra)
@@ -392,22 +424,5 @@ public function revisarImportacao()
             DB::rollBack();
             return redirect()->back()->with('error', 'Ocorreu um erro ao remover a nota: ' . $e->getMessage());
         }
-    }
-    
-    /**
-     * Mostra o formulário para editar uma Compra existente.
-     *
-     * @param  \App\Models\Compra  $compra
-     * @return \Illuminate\Http\Response
-     */
-    public function edit(Compra $compra)
-    {
-        // CORREÇÃO 2: Carrega os itens da compra junto com a compra (Eager Loading)
-        // Isso garante que $compra->itens terá os dados na view
-        $compra->load('itens'); 
-
-        $produtos = Produto::orderBy('nome')->get();
-
-        return view('compras.edit', compact('compra', 'produtos'));
     }
 }

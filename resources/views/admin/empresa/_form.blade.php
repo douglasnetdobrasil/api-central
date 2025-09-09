@@ -1,6 +1,6 @@
 <div class="space-y-8">
 
-    {{-- DADOS CADASTRAIS --}}
+    {{-- 1. DADOS CADASTRAIS --}}
     <div class="p-4 border rounded-lg dark:border-gray-700">
         <h3 class="font-semibold text-lg mb-4">1. Dados Cadastrais</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -28,7 +28,7 @@
         </div>
     </div>
 
-    {{-- ENDEREÇO FISCAL --}}
+    {{-- 2. ENDEREÇO FISCAL --}}
     <div class="p-4 border rounded-lg dark:border-gray-700">
         <h3 class="font-semibold text-lg mb-4">2. Endereço Fiscal</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -67,10 +67,11 @@
         </div>
     </div>
 
-    {{-- CONFIGURAÇÃO FISCAL --}}
+    {{-- 3. CONFIGURAÇÃO FISCAL --}}
     <div class="p-4 border rounded-lg dark:border-gray-700">
         <h3 class="font-semibold text-lg mb-4">3. Configuração Fiscal</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {{-- Linha 1 --}}
             <div>
                 <x-input-label for="crt" value="Regime Tributário (CRT) *" />
                 <select name="crt" id="crt" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm" required>
@@ -81,15 +82,16 @@
                 <x-input-error class="mt-2" :messages="$errors->get('crt')" />
             </div>
             <div>
-            <x-input-label for="ambiente_nfe" value="Ambiente de Emissão de NF-e *" />
-            <select name="ambiente_nfe" id="ambiente_nfe" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm" required>
-                <option value="2" @selected(old('ambiente_nfe', $empresa->ambiente_nfe) == 2)>2 - Homologação (Ambiente de Testes)</option>
-                <option value="1" @selected(old('ambiente_nfe', $empresa->ambiente_nfe) == 1)>1 - Produção (Valor Fiscal)</option>
-            </select>
-            <x-input-error class="mt-2" :messages="$errors->get('ambiente_nfe')" />
-        </div>
-        {{-- FIM DO NOVO BLOCO --}}
-             <div>
+                <x-input-label for="ambiente_nfe" value="Ambiente de Emissão de NF-e *" />
+                <select name="ambiente_nfe" id="ambiente_nfe" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm" required>
+                    <option value="2" @selected(old('ambiente_nfe', $empresa->ambiente_nfe) == 2)>2 - Homologação (Ambiente de Testes)</option>
+                    <option value="1" @selected(old('ambiente_nfe', $empresa->ambiente_nfe) == 1)>1 - Produção (Valor Fiscal)</option>
+                </select>
+                <x-input-error class="mt-2" :messages="$errors->get('ambiente_nfe')" />
+            </div>
+
+            {{-- Linha 2 --}}
+            <div>
                 <x-input-label for="nicho_negocio" value="Nicho de Negócio *" />
                 <select name="nicho_negocio" id="nicho_negocio" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm" required>
                     <option value="">Selecione um nicho</option>
@@ -99,10 +101,33 @@
                     <option value="loja_roupas" @selected(old('nicho_negocio', $empresa->nicho_negocio) == 'loja_roupas')>Loja de Roupas</option>
                 </select>
             </div>
+            <div>
+                <x-input-label for="codigo_uf" value="Código IBGE da UF *" />
+                <x-text-input id="codigo_uf" name="codigo_uf" type="text" class="mt-1 block w-full" :value="old('codigo_uf', $empresa->codigo_uf)" required />
+                <x-input-error class="mt-2" :messages="$errors->get('codigo_uf')" />
+                <p class="text-xs text-gray-500 mt-1">Ex: 35 para SP, 33 para RJ. Consulte a tabela IBGE.</p>
+            </div>
+
+            {{-- Divisor --}}
+            <hr class="md:col-span-2 my-2 border-gray-200 dark:border-gray-700">
+
+            {{-- Linha 3 --}}
+            <div>
+                <x-input-label for="csc_nfe" value="Token CSC (NF-e/NFC-e) *" />
+                <x-text-input id="csc_nfe" name="csc_nfe" type="text" class="mt-1 block w-full" :value="old('csc_nfe', $empresa->csc_nfe)" required />
+                <x-input-error class="mt-2" :messages="$errors->get('csc_nfe')" />
+                <p class="text-xs text-gray-500 mt-1">Fornecido pela SEFAZ do seu estado.</p>
+            </div>
+            <div>
+                <x-input-label for="csc_id_nfe" value="ID do Token CSC *" />
+                <x-text-input id="csc_id_nfe" name="csc_id_nfe" type="text" class="mt-1 block w-full" :value="old('csc_id_nfe', $empresa->csc_id_nfe)" required />
+                <x-input-error class="mt-2" :messages="$errors->get('csc_id_nfe')" />
+                <p class="text-xs text-gray-500 mt-1">Geralmente '000001' ou '000002'.</p>
+            </div>
         </div>
     </div>
 
-    {{-- CERTIFICADO DIGITAL --}}
+    {{-- 4. CERTIFICADO DIGITAL --}}
     <div class="p-4 border rounded-lg dark:border-gray-700">
         <h3 class="font-semibold text-lg mb-4">4. Certificado Digital A1</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -132,8 +157,6 @@
    </x-primary-button>
 </div>
 
-
-
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const buscarBtn = document.getElementById('buscar-cnpj-btn');
@@ -151,6 +174,7 @@
             this.textContent = 'Buscando...';
             this.disabled = true;
 
+            // Assumindo que você tem uma rota /consulta/cnpj/{cnpj} que busca os dados
             fetch(`/consulta/cnpj/${cnpj}`)
                 .then(response => {
                     if (!response.ok) {
@@ -159,7 +183,6 @@
                     return response.json();
                 })
                 .then(data => {
-                    // Preenche todos os campos que existem no seu formulário
                     document.getElementById('razao_social').value = data.razao_social || '';
                     document.getElementById('nome_fantasia').value = data.nome_fantasia || '';
                     document.getElementById('logradouro').value = data.logradouro || '';
@@ -168,8 +191,11 @@
                     document.getElementById('cep').value = data.cep || '';
                     document.getElementById('municipio').value = data.municipio || '';
                     document.getElementById('uf').value = data.uf || '';
-                    document.getElementById('codigo_municipio').value = data.codigo_ibge_municipio || '';
                     document.getElementById('telefone').value = data.ddd_telefone_1 || '';
+                    
+                    // ===== A CORREÇÃO ESTÁ AQUI =====
+                    document.getElementById('codigo_municipio').value = data.codigo_municipio || '';
+                    // ===================================
                 })
                 .catch(error => {
                     alert('Erro ao buscar dados do CNPJ: ' + error.message);

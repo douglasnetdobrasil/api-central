@@ -79,6 +79,7 @@ class ProdutoController extends Controller
             'fiscal.pis_cst' => 'nullable|string|max:2',
             'fiscal.cofins_cst' => 'nullable|string|max:2',
             'fiscal.csosn' => 'nullable|string|max:4',
+            'unidade' => 'required|string|max:10',
         ]);
        
         DB::beginTransaction();

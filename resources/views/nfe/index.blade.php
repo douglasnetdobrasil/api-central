@@ -1,64 +1,70 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-            Gerenciador de Notas Fiscais (NF-e)
+            Central de Emissão de NF-e
         </h2>
     </x-slot>
 
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6 text-gray-900 dark:text-gray-100">
-                    <h3 class="text-lg font-medium mb-4">Pendentes de Emissão</h3>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead class="bg-gray-50 dark:bg-gray-700">
-                                <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pedido</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
-                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ação</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                @forelse ($vendasParaEmitir as $venda)
-                                    <tr>
-                                        <td class="px-4 py-4">#{{ $venda->id }}</td>
-                                        <td class="px-4 py-4">{{ $venda->cliente->nome ?? 'N/A' }}</td>
-                                        <td class="px-4 py-4">{{ $venda->created_at->format('d/m/Y') }}</td>
-                                        <td class="px-4 py-4">R$ {{ number_format($venda->total, 2, ',', '.') }}</td>
-                                        <td class="px-4 py-4 text-center">
-                                            {{-- O formulário/botão que já criamos --}}
-                                            <form action="{{ route('pedidos.emitirNFe', $venda) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja emitir a NF-e para este pedido?');">
-                                                @csrf
-                                                <button type="submit" class="font-medium text-blue-600 hover:text-blue-900">
-                                                    Emitir NF-e
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">Nenhum pedido pendente de emissão.</td></tr>
-                                @endforelse
-                            </tbody>
-                        </table>
+            <div class="bg-white dark:bg-gray-800 p-4 shadow-sm sm:rounded-lg">
+                <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                    
+                    <form action="{{ route('nfe.index') }}" method="GET" class="flex items-center gap-2 w-full sm:w-auto">
+                        <div class="relative w-full">
+                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                            <input type="text" name="search" value="{{ $search ?? '' }}" placeholder="Pesquisar por cliente, nº da nota..." class="pl-10 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200">
+                        </div>
+                        <button type="submit" class="px-4 py-2 bg-gray-800 dark:bg-gray-200 border border-transparent rounded-md font-semibold text-xs text-white dark:text-gray-800 uppercase tracking-widest hover:bg-gray-700 dark:hover:bg-white focus:outline-none">
+                            Buscar
+                        </button>
+                    </form>
+
+                    <div x-data="{ open: false }" class="relative">
+                        <button @click="open = !open" class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-500 active:bg-blue-700 focus:outline-none">
+                            <span>Emitir NF-e</span>
+                            <svg class="ml-2 -mr-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        
+                        <div x-show="open" @click.away="open = false"
+                             x-transition
+                             class="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
+                             style="display: none;">
+                            <div class="py-1">
+                                <a href="{{ route('nfe.importarPedidos') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                                    A partir de Pedido(s) de Venda
+                                </a>
+                                <a href="{{-- route('nfe.create') --}}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                                    Emissão Avulsa (sem pedido)
+                                </a>
+                                <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                                    NF-e Complementar
+                                </a>
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                                    Carta de Correção (CC-e)
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                    <div class="mt-4">{{ $vendasParaEmitir->appends(['emitidas' => $notasEmitidas->currentPage()])->links() }}</div>
                 </div>
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 dark:text-gray-100">
-                    <h3 class="text-lg font-medium mb-4">Notas Emitidas</h3>
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nº NFe</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nº NFe / Série</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data Emissão</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Emissão</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                                     <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ações</th>
                                 </tr>
@@ -66,10 +72,11 @@
                             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                 @forelse ($notasEmitidas as $nfe)
                                     <tr>
-                                        <td class="px-4 py-4">{{ $nfe->numero_nfe }}</td>
-                                        <td class="px-4 py-4">{{ $nfe->venda->cliente->nome ?? 'N/A' }}</td>
-                                        <td class="px-4 py-4">{{ $nfe->created_at->format('d/m/Y H:i') }}</td>
-                                        <td class="px-4 py-4">
+                                        <td class="px-4 py-4 whitespace-nowrap">{{ $nfe->numero_nfe }} / {{ $nfe->serie }}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap">{{ $nfe->venda->cliente->nome ?? 'Emissão Avulsa' }}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap">{{ $nfe->created_at->format('d/m/Y H:i') }}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap">R$ 0,00</td>
+                                        <td class="px-4 py-4 whitespace-nowrap">
                                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                                 @if($nfe->status == 'autorizada') bg-green-100 text-green-800 @endif
                                                 @if($nfe->status == 'erro') bg-red-100 text-red-800 @endif
@@ -79,23 +86,44 @@
                                                 {{ ucfirst($nfe->status) }}
                                             </span>
                                         </td>
-                                        <td class="px-4 py-4 text-center text-sm font-medium space-x-2">
-                                            {{-- Links para futuras funcionalidades --}}
-                                            <a href="#" class="text-indigo-600 hover:text-indigo-900">DANFE</a>
-                                            <a href="#" class="text-indigo-600 hover:text-indigo-900">XML</a>
-                                            <a href="#" class="text-red-600 hover:text-red-900">Cancelar</a>
+                                        <td class="px-4 py-4 text-center text-sm font-medium">
+                                            <div x-data="{ open: false }" class="relative inline-block text-left">
+                                                <div>
+                                                    <button @click="open = !open" type="button" class="inline-flex justify-center w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none">
+                                                        Opções
+                                                        <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                                                    </button>
+                                                </div>
+                                                <div x-show="open" @click.away="open = false"
+                                                     x-transition
+                                                     class="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none z-10" style="display: none;">
+                                                    <div class="py-1">
+                                                        <a href="{{ route('nfe.danfe', $nfe) }}" target="_blank" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Ver DANFE</a>
+                                                        <a href="{{ route('nfe.xml', $nfe) }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Baixar XML</a>
+                                                        <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                                                        <button @click="$dispatch('open-cancel-modal', { id: {{ $nfe->id }} }); open = false" type="button" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-600">
+                                                            Cancelar NF-e
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </td>
                                     </tr>
                                 @empty
-                                     <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">Nenhuma NF-e emitida ainda.</td></tr>
+                                     <tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">Nenhuma NF-e encontrada.</td></tr>
                                 @endforelse
                             </tbody>
                         </table>
                     </div>
-                    <div class="mt-4">{{ $notasEmitidas->appends(['pendentes' => $vendasParaEmitir->currentPage()])->links() }}</div>
+                    
+                    <div class="mt-4">
+                        {{ $notasEmitidas->withQueryString()->links() }}
+                    </div>
                 </div>
             </div>
-
         </div>
     </div>
+
+    <div x-data="{ open: false, nfeId: null }" @open-cancel-modal.window="open = true; nfeId = $event.detail.id" x-show="open" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true" style="display: none;">
+        </div>
 </x-app-layout>

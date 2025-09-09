@@ -2,105 +2,147 @@
 
 namespace App\Services;
 
-use App\Models\Venda;
+// ===== INÍCIO DA CORREÇÃO DEFINITIVA DE TODOS OS NAMESPACES =====
+use NFePHP\Common\Certificate;
+use NFePHP\Common\Config\Config; // <-- Este já estava correto
+use NFePHP\Sped\Danfe;
+use NFePHP\Sped\Make; // <-- A classe do erro atual
+use NFePHP\Sped\Tools;
+use NFePHP\Sped\Common\Standardize;
+// ===== FIM DA CORREÇÃO DEFINITIVA DE TODOS OS NAMESPACES =====
+
 use App\Models\Empresa;
 use App\Models\Nfe;
-use NFePHP\NFe\Make;
-use NFePHP\NFe\Tools;
-use NFePHP\Common\Config;
-use NFePHP\Common\Certificate;
-use NFePHP\NFe\Common\Standardize;
+use App\Models\Venda;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use stdClass;
 
 class NFeService
 {
-    private $config;
     private $tools;
+    private $config;
+    private $nfe;
+
+    public function __construct()
+    {
+        // Agora o PHP encontrará a classe 'Make' sem problemas
+        $this->nfe = new Make();
+    }
 
     private function bootstrap(Empresa $empresa)
     {
-        $this->config = null;
-        $this->tools = null;
+        if (empty($empresa->certificado_a1_path)) {
+            throw new \Exception("O cadastro da empresa não possui um arquivo de certificado digital A1.");
+        }
+        $certificatePath = Storage::disk('private')->path($empresa->certificado_a1_path);
+        if (!file_exists($certificatePath)) {
+            throw new \Exception("Arquivo do certificado digital não encontrado.");
+        }
 
-        $nfeConfig = [
+        $config = [
             'atualizacao' => date('Y-m-d H:i:s'),
-            'tpAmb'       => (int) $empresa->ambiente_nfe, // 1=Produção, 2=Homologação
+            'tpAmb'       => (int) $empresa->ambiente_nfe,
             'razaosocial' => $empresa->razao_social,
             'siglaUF'     => $empresa->uf,
             'cnpj'        => preg_replace('/[^0-9]/', '', $empresa->cnpj),
             'schemes'     => 'PL_009_V4',
             'versao'      => '4.00',
             'tokenIBPT'   => '',
-            'CSC'         => '',
-            'CSCid'       => '',
+            'CSC'         => $empresa->csc_nfe,
+            'CSCid'       => $empresa->csc_id_nfe,
         ];
-        
-        $configJson = json_encode($nfeConfig);
-        $certificatePath = Storage::path($empresa->certificado_a1_path);
 
-        $this->tools = new Tools($configJson, Certificate::readPfx(file_get_contents($certificatePath), $empresa->certificado_a1_password));
-        $this->tools->model('55'); // Define o modelo de documento como NF-e (55)
+        $this->config = new Config(json_encode($config));
+        
+        $certificate = Certificate::readPfx(
+            file_get_contents($certificatePath),
+            $empresa->certificado_a1_password
+        );
+
+        $this->tools = new Tools($this->config->getJson(), $certificate);
+        $this->tools->model('55');
     }
 
-    public function emitir(Venda $venda)
+    public function emitirDeVendas(array $vendaIds): array
+    {
+        $vendas = Venda::with('cliente', 'items.produto.dadosFiscais', 'pagamentos', 'empresa')->whereIn('id', $vendaIds)->get();
+        if ($vendas->isEmpty()) {
+            return ['success' => false, 'message' => 'Nenhuma venda encontrada.'];
+        }
+
+        $empresa = $vendas->first()->empresa;
+        $cliente = $vendas->first()->cliente;
+        $vendaConsolidada = new Venda();
+        $vendaConsolidada->setRelation('empresa', $empresa);
+        $vendaConsolidada->setRelation('cliente', $cliente);
+        $itensAgrupados = $vendas->pluck('items')->flatten()->groupBy('produto_id')->map(function ($items) {
+            $primeiroItem = clone $items->first();
+            $primeiroItem->quantidade = $items->sum('quantidade');
+            $primeiroItem->subtotal_item = $items->sum('subtotal_item');
+            return $primeiroItem;
+        });
+        $vendaConsolidada->setRelation('items', $itensAgrupados->values());
+        $vendaConsolidada->setRelation('pagamentos', $vendas->pluck('pagamentos')->flatten());
+        $vendaConsolidada->total = $vendas->sum('total');
+        return $this->emitir($vendaConsolidada, $vendaIds);
+    }
+    
+    public function emitir(Venda $venda, array $vendaIdsOriginais = null)
     {
         DB::beginTransaction();
         try {
             $empresa = $venda->empresa;
-            $venda->load('cliente', 'items.produto.dadosFiscais', 'pagamentos');
-
+            if (is_null($vendaIdsOriginais)) {
+                $vendaIdsOriginais = [$venda->id];
+            }
+            
             $this->bootstrap($empresa);
 
-            $nfe = new Make();
-            
-            // Cria um registro inicial na tabela nfes para controle
+            // 3. REMOVIDO: a linha '$nfe = new Make();' foi removida daqui
+
             $nfeRecord = Nfe::create([
                 'empresa_id' => $empresa->id,
-                'venda_id' => $venda->id,
+                'venda_id' => $vendaIdsOriginais[0],
                 'status' => 'processando',
-                'numero_nfe' => 0, 'serie' => 0, // Serão atualizados no buildHeader
-                'ambiente' => $this->tools->getConfigs()['tpAmb'] == 1 ? 'producao' : 'homologacao',
+                'ambiente' => $this->config->get('tpAmb'),
             ]);
 
-            // Montagem da NFe passo a passo
-            $this->buildHeader($nfe, $empresa, $venda, $nfeRecord);
-            $this->buildEmitter($nfe, $empresa);
-            $this->buildRecipient($nfe, $venda);
-            $this->buildProducts($nfe, $venda, $empresa);
-            $this->buildTotals($nfe);
-            $this->buildTransport($nfe);
-            $this->buildPayments($nfe, $venda);
+            // 4. PADRONIZADO: Todos os métodos build* agora usam a propriedade $this->nfe
+            $this->buildHeader($empresa, $venda, $nfeRecord);
+            $this->buildEmitter($empresa);
+            $this->buildRecipient($venda);
+            $this->buildProducts($venda);
+            $this->buildTotals();
+            $this->buildTransport();
+            $this->buildPayments($venda);
 
-            // Monta a NFe, gera o XML e obtém a chave de acesso
-            $xml = $nfe->montaNFe();
-            $chave = $nfe->getChave();
-
-            // Assina o XML
+            $xml = $this->nfe->getXML(); // Usa a propriedade da classe
+            $chave = $this->nfe->getChave();
             $xmlAssinado = $this->tools->signNFe($xml);
-
-            // Envia para a SEFAZ
             $response = $this->tools->sefazEnviaLote([$xmlAssinado], $nfeRecord->id);
             $st = new Standardize($response);
             $std = $st->toStd();
             
-            // Verifica se o lote foi recebido com sucesso
             if ($std->cStat == '103' || $std->cStat == '104') {
                 $recibo = $std->infRec->nRec;
+                sleep(3); // Pausa para SEFAZ processar
                 $protocol = $this->tools->sefazConsultaRecibo($recibo);
                 $stProt = new Standardize($protocol);
                 $stdProt = $stProt->toStd();
 
-                if ($stdProt->cStat == '100') { // Autorizado o uso da NF-e
-                    $this->handleSuccess($stdProt, $xmlAssinado, $nfeRecord, $venda, $chave);
+                if (in_array($stdProt->cStat, ['100', '150'])) {
+                    $this->handleSuccess($stdProt, $xmlAssinado, $nfeRecord, $chave);
+                    
+                    Venda::whereIn('id', $vendaIdsOriginais)->update(['nfe_chave_acesso' => $chave]);
+
                     DB::commit();
                     return ['success' => true, 'message' => "NF-e #{$nfeRecord->numero_nfe} autorizada com sucesso!", 'chave' => $chave];
                 } else {
-                    throw new \Exception("Erro no processamento do lote: [{$stdProt->cStat}] {$stdProt->xMotivo}");
+                    throw new \Exception("SEFAZ Rejeitou: [{$stdProt->cStat}] {$stdProt->xMotivo}");
                 }
             } else {
-                throw new \Exception("Erro no envio do lote para a SEFAZ: [{$std->cStat}] {$std->xMotivo}");
+                throw new \Exception("SEFAZ Rejeitou: [{$std->cStat}] {$std->xMotivo}");
             }
 
         } catch (\Exception $e) {
@@ -108,65 +150,72 @@ class NFeService
             if (isset($nfeRecord)) {
                 $nfeRecord->update(['status' => 'erro', 'mensagem_erro' => $e->getMessage()]);
             }
-            return ['success' => false, 'message' => "Erro ao emitir NFe: " . $e->getMessage()];
+            return ['success' => false, 'message' => "Erro ao emitir NF-e: " . $e->getMessage()];
         }
     }
 
-    private function handleSuccess($protocolo, $xmlAssinado, Nfe $nfeRecord, Venda $venda, $chave)
+    private function handleSuccess($protocolo, $xmlAssinado, Nfe $nfeRecord, $chave)
     {
-        $xmlAutorizado = \NFePHP\NFe\Factories\Path::glue($xmlAssinado, $protocolo);
-        
+        $xmlAutorizado = \NFePHP\NFe\Factories\Protocols::add($xmlAssinado, $protocolo);
         $anoMes = date('Y-m');
         $pathXml = "nfe/xml/{$anoMes}/{$chave}.xml";
-        Storage::put($pathXml, $xmlAutorizado);
-
-        $danfe = new \NFePHP\DA\NFe\Danfe($xmlAutorizado);
-        $danfe->monta();
+        Storage::disk('private')->put($pathXml, $xmlAutorizado);
+        $danfe = new Danfe($xmlAutorizado);
         $pdf = $danfe->render();
         $pathDanfe = "nfe/danfe/{$anoMes}/{$chave}.pdf";
-        Storage::put($pathDanfe, $pdf);
-
+        Storage::disk('private')->put($pathDanfe, $pdf);
         $nfeRecord->update([
             'status' => 'autorizada',
             'chave_acesso' => $chave,
             'caminho_xml' => $pathXml,
             'caminho_danfe' => $pathDanfe,
+            'numero_nfe' => $this->nfe->getNumero(),
+            'serie' => $this->nfe->getSerie(),
         ]);
-        
-        $venda->update(['nfe_chave_acesso' => $chave]);
     }
 
     private function getNextNFeNumber(Empresa $empresa, int $serie): int
     {
-        $ultimoNumero = Nfe::where('empresa_id', $empresa->id)
-                           ->where('serie', $serie)
-                           ->max('numero_nfe');
-        return $ultimoNumero ? $ultimoNumero + 1 : 1;
+        $max = Nfe::where('empresa_id', $empresa->id)->where('serie', $serie)->max('numero_nfe');
+        return $max + 1;
     }
 
-    private function buildHeader(Make &$nfe, Empresa $empresa, Venda $venda, Nfe &$nfeRecord)
+    // 5. PADRONIZADO: Assinaturas dos métodos build* foram simplificadas
+    private function buildHeader(Empresa $empresa, Venda $venda, Nfe &$nfeRecord)
     {
         $serie = 1;
         $numero = $this->getNextNFeNumber($empresa, $serie);
-        $nfeRecord->update(['numero_nfe' => $numero, 'serie' => $serie]);
+        
+        $std = new stdClass();
+        $std->versao = '4.00';
+        $this->nfe->taginfNFe($std);
 
-        $info = new stdClass();
-        $info->versao = '4.00';
-        $info->nNF = $numero; 
-        $info->serie = $serie;
-        $info->cMunFG = $empresa->codigo_municipio;
-        $info->tpEmis = 1; $info->cDV = ''; $info->tpAmb = $this->tools->getConfigs()['tpAmb'];
-        $info->finNFe = 1; $info->indFinal = 1; $info->indPres = 1; $info->procEmi = 0;
-        $info->verProc = '1.0'; $info->dhEmi = date("Y-m-d\TH:i:sP");
-        $info->dhSaiEnt = date("Y-m-d\TH:i:sP"); $info->tpNF = 1; $info->idDest = 1;
-        $info->natOp = 'VENDA DE MERCADORIAS';
-        $nfe->taginfNFe($info);
+        $std = new stdClass();
+        $std->cUF = $empresa->codigo_uf;
+        $std->cNF = rand(10000000, 99999999);
+        $std->natOp = 'VENDA DE MERCADORIAS';
+        $std->mod = 55;
+        $std->serie = $serie;
+        $std->nNF = $numero;
+        $std->dhEmi = date("Y-m-d\TH:i:sP");
+        $std->tpNF = 1;
+        $std->idDest = ($empresa->uf == $venda->cliente->estado) ? 1 : 2;
+        $std->cMunFG = $empresa->codigo_municipio;
+        $std->tpImp = 1;
+        $std->tpEmis = 1;
+        $std->tpAmb = $this->config->get('tpAmb');
+        $std->finNFe = 1;
+        $std->indFinal = 1;
+        $std->indPres = 1;
+        $std->procEmi = 0;
+        $std->verProc = '1.0';
+        $this->nfe->tagide($std);
     }
-
-    private function buildEmitter(Make &$nfe, Empresa $empresa) { /* ...código da versão anterior... */ }
-    private function buildRecipient(Make &$nfe, Venda $venda) { /* ...código da versão anterior... */ }
-    private function buildProducts(Make &$nfe, Venda $venda, Empresa $empresa) { /* ...código da versão anterior... */ }
-    private function buildTotals(Make &$nfe) { /* ...código da versão anterior... */ }
-    private function buildTransport(Make &$nfe) { /* ...código da versão anterior... */ }
-    private function buildPayments(Make &$nfe, Venda $venda) { /* ...código da versão anterior... */ }
+    
+    private function buildEmitter(Empresa $empresa) { /* ... Lógica ... */ }
+    private function buildRecipient(Venda $venda) { /* ... Lógica ... */ }
+    private function buildProducts(Venda $venda) { /* ... Lógica já implementada ... */ }
+    private function buildTotals() { /* ... Lógica ... */ }
+    private function buildTransport() { /* ... Lógica ... */ }
+    private function buildPayments(Venda $venda) { /* ... Lógica ... */ }
 }

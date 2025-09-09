@@ -53,6 +53,18 @@
                                 <x-text-input id="nome" name="nome" type="text" class="mt-1 block w-full" :value="old('nome', $produto->nome ?? '')" required />
                             </div>
                             <div>
+        <x-input-label for="unidade" value="Unidade" />
+        <x-text-input id="unidade" name="unidade" type="text" placeholder="Ex: UN, KG, CX, PC" class="mt-1 block w-full" :value="old('unidade', $produto->unidade ?? '')" required />
+    </div>
+
+    <div>
+        <x-input-label for="categoria_id" value="Categoria" />
+        <select id="categoria_id" name="categoria_id" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+            {{-- ... opções de categoria ... --}}
+        </select>
+    </div>
+</div>
+                            <div>
                                 <x-input-label for="categoria_id" value="Categoria" />
                                 <select id="categoria_id" name="categoria_id" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
                                     <option value="">Selecione...</option>

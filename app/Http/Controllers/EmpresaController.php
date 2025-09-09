@@ -41,6 +41,9 @@ class EmpresaController extends Controller
           //  'certificado_a1_path' => 'nullable|file|mimes:pfx',
             'certificado_a1_password' => 'nullable|string',
             'ambiente_nfe' => 'required|in:1,2',
+            'codigo_uf' => 'required|integer|digits:2',
+            'csc_nfe' => 'required|string|max:100',
+            'csc_id_nfe' => 'required|string|max:10',
         ]);
 
         if ($request->hasFile('certificado_a1_path')) {
@@ -76,6 +79,9 @@ class EmpresaController extends Controller
            // 'certificado_a1_path' => 'nullable|file|mimes:pfx',
             'certificado_a1_password' => 'nullable|string',
             'ambiente_nfe' => 'required|in:1,2',
+            'codigo_uf' => 'required|integer|digits:2',
+            'csc_nfe' => 'required|string|max:100',
+            'csc_id_nfe' => 'required|string|max:10',
         ]);
     
         if ($request->hasFile('certificado_a1_path')) {

@@ -66,6 +66,8 @@ class ClienteController extends Controller
             'bairro' => 'nullable|string|max:255',
             'cidade' => 'nullable|string|max:255',
             'estado' => 'nullable|string|max:2',
+            'ie' => 'nullable|string|max:20',
+    'codigo_municipio' => 'nullable|string|max:7',
         ]);
     
         // ===== A LINHA DA CORREÇÃO ESTÁ AQUI =====
@@ -112,6 +114,8 @@ class ClienteController extends Controller
             'bairro' => 'nullable|string|max:255',
             'cidade' => 'nullable|string|max:255',
             'estado' => 'nullable|string|max:2',
+            'ie' => 'nullable|string|max:20',
+    'codigo_municipio' => 'nullable|string|max:7',
         ]);
     
         $cliente->update($validatedData);

@@ -33,6 +33,9 @@ class Empresa extends Model
         'nicho_negocio',
         'website', // Adicionado
         'logo_path', // Adicionado
+        'codigo_uf',
+        'csc_nfe',
+        'csc_id_nfe',
     ];
 
     /**

@@ -33,6 +33,16 @@ class Venda extends Model
         return $this->hasMany(VendaItem::class);
     }
 
+    public function itens(): HasMany
+    {
+        // O truque é simplesmente chamar o método original aqui dentro.
+        return $this->items();
+    }
+    public function empresa(): BelongsTo
+    {
+        return $this->belongsTo(Empresa::class);
+    }
+
     /**
      * Relacionamento: Uma venda tem muitos pagamentos.
      */

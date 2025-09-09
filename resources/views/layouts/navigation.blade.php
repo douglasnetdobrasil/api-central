@@ -368,7 +368,7 @@
                     </x-dropdown-link>
                 @endcan
                 @can('ver-config-fiscal')
-                    <x-dropdown-link :href="route('empresa.index')">
+                    <x-dropdown-link :href="route('admin.perfis-fiscais.index')">
                         {{ __('Configurações Fiscais') }}
                     </x-dropdown-link>
                 @endcan

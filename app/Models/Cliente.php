@@ -26,6 +26,8 @@ class Cliente extends Model
         'bairro',
         'cidade',
         'estado',
+        'ie',               // <-- ADICIONE ESTA LINHA
+        'codigo_municipio',
     ];
 
     protected $casts = [
