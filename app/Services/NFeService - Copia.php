@@ -2,15 +2,16 @@
 
 namespace App\Services;
 
-// Namespaces corretos e validados para a biblioteca nfephp/nfe v4
+// ===== NAMESPACES CORRETOS E FINAIS PARA A BIBLIOTECA nfephp/nfe v4 =====
 use NFePHP\Common\Certificate;
 use NFePHP\NFe\Common\Config;
-use NFePHP\DA\NFe\Danfe;
+use NFePHP\NFe\Danfe;
 use NFePHP\NFe\Make;
 use NFePHP\NFe\Tools;
 use NFePHP\NFe\Common\Standardize;
+// =========================================================================
+
 use App\Models\Empresa;
-use NFePHP\NFe\Complements;
 use App\Models\Nfe;
 use App\Models\Venda;
 use Illuminate\Support\Facades\DB;
@@ -53,7 +54,9 @@ class NFeService
         ];
 
         $this->configArray = $config;
+
         $configJson = json_encode($config);
+        $this->config = new Config($configJson);
         
         try {
             $certificate = Certificate::readPfx(file_get_contents($certificatePath), $empresa->certificado_a1_password);
@@ -70,9 +73,13 @@ class NFeService
     
     public function emitirDeVendas(array $vendaIds): array
     {
+        // ======================= A CORREÇÃO ESTÁ AQUI =======================
+        // Trocamos 'pagamentos' por 'pagamentos.forma' para carregar o relacionamento aninhado
         $vendas = Venda::with('cliente', 'items.produto.dadosFiscais', 'pagamentos.forma', 'empresa')->whereIn('id', $vendaIds)->get();
+        // ====================================================================
+    
         if ($vendas->isEmpty()) return ['success' => false, 'message' => 'Nenhuma venda encontrada.'];
-
+    
         $empresa = $vendas->first()->empresa;
         $cliente = $vendas->first()->cliente;
         $vendaConsolidada = new Venda();
@@ -98,70 +105,79 @@ class NFeService
             if (is_null($vendaIdsOriginais)) $vendaIdsOriginais = [$venda->id];
             
             $this->bootstrap($empresa);
-
+    
+            // ===== INÍCIO DA CORREÇÃO =====
+            // 1. Calcula o número e a série ANTES de usar as variáveis.
             $serie = 1;
             $numero = $this->getNextNFeNumber($empresa, $serie);
-
+            // ===== FIM DA CORREÇÃO =====
+    
             $nfeRecord = Nfe::create([
-                'empresa_id' => $empresa->id, 'venda_id' => $vendaIdsOriginais[0],
-                'status' => 'processando', 'ambiente' => $this->configArray['tpAmb'],
-                'serie' => $serie, 'numero_nfe' => $numero,
+                'empresa_id' => $empresa->id, 
+                'venda_id' => $vendaIdsOriginais[0],
+                'status' => 'processando', 
+                'ambiente' => $this->configArray['tpAmb'],
+                'serie' => $serie,      // Agora a variável $serie existe
+                'numero_nfe' => $numero, // Agora a variável $numero existe
             ]);
-
+    
+            // A chamada para buildHeader agora funciona, pois as variáveis foram definidas.
             $this->buildHeader($empresa, $venda, $numero, $serie);
+            
             $this->buildEmitter($empresa);
             $this->buildRecipient($venda);
             $this->buildProducts($venda);
             $this->buildTotals();
             $this->buildTransport();
             $this->buildPayments($venda);
-
+    
             $xml = $this->nfe->getXML();
-            $errors = $this->nfe->getErrors();
-            if (count($errors) > 0) {
-                throw new \Exception("Erros de validação do XML:\n- " . implode("\n- ", $errors));
-            }
-
             $chave = $this->nfe->getChave();
+            
             $xmlAssinado = $this->tools->signNFe($xml);
-            // 1. FORÇA O ENVIO SÍNCRONO: Adiciona o parâmetro '1' ao final da chamada.
-            // Isso é obrigatório para lotes com apenas uma NF-e.
-            $protocolo = $this->tools->sefazEnviaLote([$xmlAssinado], $nfeRecord->id, 1);
+            $response = $this->tools->sefazEnviaLote([$xmlAssinado], $nfeRecord->id);
+            $st = new Standardize($response);
+            $std = $st->toStd();
             
-            // 2. TRATA A RESPOSTA DIRETA: A variável $protocolo já contém o XML com o resultado
-            // final do processamento. A consulta de recibo não é mais necessária.
-            $stProt = new Standardize($protocolo);
+            if ($std->cStat != '103' && $std->cStat != '104') {
+                throw new \Exception("SEFAZ Rejeitou o Lote: [{$std->cStat}] {$std->xMotivo}");
+            }
+            
+            $recibo = $std->infRec->nRec;
+            sleep(3);
+            $protocol = $this->tools->sefazConsultaRecibo($recibo);
+            
+            $stProt = new Standardize($protocol);
             $stdProt = $stProt->toStd();
-            
-            // Tenta obter o status de dentro da tag <protNFe>. Se não existir, usa o status geral.
-            $cStat = $stdProt->protNFe->infProt->cStat ?? $stdProt->cStat ?? null;
-            $xMotivo = $stdProt->protNFe->infProt->xMotivo ?? $stdProt->xMotivo ?? 'Motivo da rejeição não especificado.';
-            
-            // Status '100' (Autorizado) ou '150' (Autorizado fora de prazo) indicam sucesso.
-            if (in_array($cStat, ['100', '150'])) {
-                // A nota foi autorizada com sucesso.
-                // O método handleSuccess espera o XML do protocolo como primeiro parâmetro.
-                $this->handleSuccess($protocolo, $xmlAssinado, $nfeRecord, $chave);
+    
+            if (in_array($stdProt->cStat, ['100', '150'])) {
+                $this->handleSuccess($stdProt, $xmlAssinado, $nfeRecord, $chave);
                 Venda::whereIn('id', $vendaIdsOriginais)->update(['nfe_chave_acesso' => $chave]);
                 DB::commit();
                 return ['success' => true, 'message' => "NF-e #{$nfeRecord->numero_nfe} autorizada!", 'chave' => $chave];
             } else {
-                // A nota foi processada, mas rejeitada pela SEFAZ.
-                throw new \Exception("SEFAZ Rejeitou a Nota: [{$cStat}] {$xMotivo}");
+                throw new \Exception("SEFAZ Rejeitou a Nota: [{$stdProt->cStat}] {$stdProt->xMotivo}");
             }
-
+    
         } catch (\Exception $e) {
+            $errors = $this->nfe->getErrors();
+            $detailedMessage = $e->getMessage();
+    
+            if (count($errors) > 0) {
+                $detailedMessage .= "\n\nDetalhes dos Erros de Validação:\n- " . implode("\n- ", $errors);
+            }
+            
             DB::rollBack();
             if (isset($nfeRecord)) {
-                $nfeRecord->update(['status' => 'erro', 'mensagem_erro' => $e->getMessage()]);
+                $nfeRecord->update(['status' => 'erro', 'mensagem_erro' => $detailedMessage]);
             }
-            return ['success' => false, 'message' => "Erro ao emitir NF-e: " . $e->getMessage()];
+            return ['success' => false, 'message' => "Erro ao emitir NF-e: " . $detailedMessage];
         }
     }
 
     private function handleSuccess($protocolo, $xmlAssinado, Nfe $nfeRecord, $chave)
     {
-        $xmlAutorizado = Complements::toAuthorize($xmlAssinado, $protocolo);
+        $xmlAutorizado = $this->tools->addProtocol($xmlAssinado, $protocolo);
         $anoMes = date('Y-m');
         $pathXml = "nfe/xml/{$anoMes}/{$chave}.xml";
         Storage::disk('private')->put($pathXml, $xmlAutorizado);
@@ -172,28 +188,19 @@ class NFeService
         Storage::disk('private')->put($pathDanfe, $pdf);
         
         $nfeRecord->update([
-            'status' => 'autorizada', 'chave_acesso' => $chave,
-            'caminho_xml' => $pathXml, 'caminho_danfe' => $pathDanfe,
+            'status' => 'autorizada',
+            'chave_acesso' => $chave,
+            'caminho_xml' => $pathXml,
+            'caminho_danfe' => $pathDanfe,
+            'numero_nfe' => $this->nfe->getNumero(),
+            'serie' => $this->nfe->getSerie(),
         ]);
     }
 
     private function getNextNFeNumber(Empresa $empresa, int $serie): int
     {
-        // 1. Busca o número máximo de NFe já emitido E REGISTRADO no seu banco.
         $max = Nfe::where('empresa_id', $empresa->id)->where('serie', $serie)->max('numero_nfe');
-
-        // 2. Se já existe um número máximo ($max > 0), isso significa que seu sistema
-        //    já emitiu notas para esta empresa. A sequência deve continuar a partir daí.
-        if ($max) {
-            return $max + 1;
-        }
-
-        // 3. SE NÃO HÁ NOTAS emitidas pelo seu sistema, verificamos se há um número
-        //    inicial configurado no cadastro da empresa.
-        //    O '?? 1' serve como segurança: se o campo for nulo, ele começa do 1.
-        $numeroInicial = $empresa->nfe_proximo_numero ?? 1;
-
-        return $numeroInicial;
+        return $max + 1;
     }
 
     private function buildHeader(Empresa $empresa, Venda $venda, int $numero, int $serie)
@@ -201,20 +208,26 @@ class NFeService
         $std = new stdClass();
         $std->versao = '4.00';
         $this->nfe->taginfNFe($std);
+
         $std = new stdClass();
         $std->cUF = $empresa->codigo_uf;
         $std->cNF = rand(10000000, 99999999);
         $std->natOp = 'VENDA DE MERCADORIAS';
         $std->mod = 55;
-        $std->serie = $serie;
-        $std->nNF = $numero;
+        $std->serie = $serie; // Usa o parâmetro
+        $std->nNF = $numero; // Usa o parâmetro
         $std->dhEmi = date("Y-m-d\TH:i:sP");
         $std->tpNF = 1;
         $std->idDest = ($empresa->uf == $venda->cliente->estado) ? 1 : 2;
         $std->cMunFG = $empresa->codigo_municipio;
-        $std->tpImp = 1; $std->tpEmis = 1; $std->tpAmb = $this->configArray['tpAmb'];
-        $std->finNFe = 1; $std->indFinal = 1; $std->indPres = 1;
-        $std->procEmi = 0; $std->verProc = 'Sistema ERP 1.0';
+        $std->tpImp = 1; 
+        $std->tpEmis = 1; 
+        $std->tpAmb = $this->configArray['tpAmb'];
+        $std->finNFe = 1; 
+        $std->indFinal = 1; 
+        $std->indPres = 1;
+        $std->procEmi = 0; 
+        $std->verProc = 'Sistema ERP 1.0';
         $this->nfe->tagide($std);
     }
     
@@ -227,6 +240,7 @@ class NFeService
         $std->CRT = $empresa->crt;
         $std->CNPJ = preg_replace('/[^0-9]/', '', $empresa->cnpj);
         $this->nfe->tagemit($std);
+
         $std = new stdClass();
         $std->xLgr = $empresa->logradouro;
         $std->nro = $empresa->numero;
@@ -245,18 +259,21 @@ class NFeService
     {
         $cliente = $venda->cliente;
         $cpfCnpj = preg_replace('/[^0-9]/', '', $cliente->cpf_cnpj);
+
         $std = new stdClass();
         $std->xNome = $cliente->nome;
+
         if (strlen($cpfCnpj) == 14) {
-            $std->indIEDest = $cliente->ie ? '1' : '2';
+            $std->indIEDest = $cliente->ie ? '1' : '2'; // 1-Contribuinte, 2-Isento
             $std->IE = preg_replace('/[^0-9]/', '', $cliente->ie ?? '');
             $std->CNPJ = $cpfCnpj;
         } else {
-            $std->indIEDest = '9';
+            $std->indIEDest = '9'; // 9-Não Contribuinte
             $std->CPF = $cpfCnpj;
         }
         $std->email = $cliente->email;
         $this->nfe->tagdest($std);
+
         $std = new stdClass();
         $std->xLgr = $cliente->logradouro;
         $std->nro = $cliente->numero;
@@ -276,59 +293,74 @@ class NFeService
         foreach ($venda->items as $i => $item) {
             $produto = $item->produto;
             $dadosFiscais = $produto->dadosFiscais;
-            
             if (!$dadosFiscais) {
                 throw new \Exception("Dados fiscais não encontrados para o produto: {$produto->nome}");
-            }
-            if (empty($dadosFiscais->pis_cst) || empty($dadosFiscais->cofins_cst)) {
-                throw new \Exception("Os códigos CST de PIS e COFINS são obrigatórios no cadastro fiscal do produto: {$produto->nome}");
             }
     
             // --- Montagem do grupo <prod> (Sem alterações) ---
             $std = new stdClass();
             $std->item = $i + 1;
-            $std->cProd = $produto->id; $std->cEAN = $produto->codigo_barras ?: 'SEM GTIN';
-            $std->xProd = $produto->nome; $std->NCM = $dadosFiscais->ncm;
-            $std->CFOP = $dadosFiscais->cfop; $std->uCom = $produto->unidade;
-            $std->qCom = $item->quantidade; $std->vUnCom = $item->preco_unitario;
-            $std->vProd = $item->subtotal_item; $std->cEANTrib = $produto->codigo_barras ?: 'SEM GTIN';
-            $std->uTrib = $produto->unidade; $std->qTrib = $item->quantidade;
-            $std->vUnTrib = $item->preco_unitario; $std->indTot = 1;
+            $std->cProd = $produto->id;
+            $std->cEAN = $produto->codigo_barras ?: 'SEM GTIN';
+            $std->xProd = $produto->nome;
+            $std->NCM = $dadosFiscais->ncm;
+            $std->CFOP = $dadosFiscais->cfop;
+            $std->uCom = $produto->unidade;
+            $std->qCom = $item->quantidade;
+            $std->vUnCom = $item->preco_unitario;
+            $std->vProd = $item->subtotal_item;
+            $std->cEANTrib = $produto->codigo_barras ?: 'SEM GTIN';
+            $std->uTrib = $produto->unidade;
+            $std->qTrib = $item->quantidade;
+            $std->vUnTrib = $item->preco_unitario;
+            $std->indTot = 1;
             $this->nfe->tagprod($std);
     
             // --- Montagem do grupo <imposto> (Sem alterações) ---
             $std = new stdClass();
             $std->item = $i + 1;
+            $std->vTotTrib = 0.00;
             $this->nfe->tagimposto($std);
     
             // --- Montagem do ICMS (Sem alterações) ---
             if ($empresa->crt == 1) { // Simples Nacional
                 $std = new stdClass();
-                $std->item = $i + 1; $std->orig = $dadosFiscais->origem;
+                $std->item = $i + 1;
+                $std->orig = $dadosFiscais->origem;
                 $std->CSOSN = $dadosFiscais->csosn;
                 $this->nfe->tagICMSSN($std);
             } else { // Regime Normal
-                // ... sua lógica para regime normal ...
+                $std = new stdClass();
+                $std->item = $i + 1;
+                $std->orig = $dadosFiscais->origem;
+                $std->CST = $dadosFiscais->icms_cst;
+                $std->modBC = 0; $std->vBC = 0; $std->pICMS = 0; $std->vICMS = 0;
+                $this->nfe->tagICMS($std);
             }
             
             // ======================= INÍCIO DA CORREÇÃO FINAL PIS/COFINS =======================
-            // A forma correta é passar os dados do "conteúdo" diretamente para o método da "caixa".
-            
             // Para o PIS
-            $std = new stdClass();
-            $std->item = $i + 1;
-            $std->CST = $dadosFiscais->pis_cst; // A biblioteca usará este CST para criar o sub-bloco correto (PISNT)
-            $this->nfe->tagPIS($std); // Chamamos apenas o método principal
+            $stdPIS = new stdClass();
+            $stdPIS->item = $i + 1; // Item
+    
+            $stdPISNT = new stdClass();
+            $stdPISNT->CST = $dadosFiscais->pis_cst;
+            
+            $stdPIS->PISNT = $stdPISNT; // Aninha o PISNT dentro do PIS
+            $this->nfe->tagPIS($stdPIS); // Adiciona o grupo PIS completo
     
             // Para o COFINS
-            $std = new stdClass();
-            $std->item = $i + 1;
-            $std->CST = $dadosFiscais->cofins_cst; // A biblioteca usará este CST para criar o sub-bloco correto (COFINSNT)
-            $this->nfe->tagCOFINS($std); // Chamamos apenas o método principal
+            $stdCOFINS = new stdClass();
+            $stdCOFINS->item = $i + 1; // Item
+    
+            $stdCOFINSNT = new stdClass();
+            $stdCOFINSNT->CST = $dadosFiscais->cofins_cst;
+    
+            $stdCOFINS->COFINSNT = $stdCOFINSNT; // Aninha o COFINSNT dentro do COFINS
+            $this->nfe->tagCOFINS($stdCOFINS); // Adiciona o grupo COFINS completo
             // ======================= FIM DA CORREÇÃO FINAL PIS/COFINS =======================
         }
     }
-    
     private function buildTotals()
     {
         $this->nfe->tagICMSTot(new stdClass());
@@ -341,21 +373,34 @@ class NFeService
         $this->nfe->tagtransp($std);
     }
 
+    
+    
+
+
+
     private function buildPayments(Venda $venda)
     {
+        // 1. Cria o grupo de pagamento <pag> PRIMEIRO.
         $this->nfe->tagpag(new stdClass());
+    
+        // 2. Agora, adiciona os detalhes de cada pagamento <detPag> DENTRO do grupo.
         if ($venda->pagamentos->isEmpty()) {
             $det = new stdClass();
-            $det->tPag = '99';
+            $det->tPag = '99'; // 99-Outros
             $det->vPag = number_format($venda->total, 2, '.', '');
             $this->nfe->tagdetPag($det);
         } else {
             foreach ($venda->pagamentos as $pagamento) {
                 $det = new stdClass();
+    
+                // ======================= A CORREÇÃO FINAL ESTÁ AQUI =======================
+                // Acessamos o relacionamento 'forma' para pegar o 'codigo_sefaz'
                 $det->tPag = $pagamento->forma->codigo_sefaz;
+                // ========================================================================
+                
                 $det->vPag = number_format($pagamento->valor, 2, '.', '');
-                if (in_array($det->tPag, ['03', '04'])) {
-                    $det->tpIntegra = 2;
+                if (in_array($det->tPag, ['03', '04'])) { // Cartão de Crédito/Débito
+                    $det->tpIntegra = 2; // 2-Não integrado com o sistema de automação
                 }
                 $this->nfe->tagdetPag($det);
             }

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Scopes\EmpresaScope;
 
 class Venda extends Model
 {
@@ -23,55 +24,45 @@ class Venda extends Model
         'total',
         'status',
         'observacoes',
+        'nfe_chave_acesso',
     ];
 
+    // --- RELACIONAMENTOS ---
+
+    public function empresa(): BelongsTo
+    {
+        return $this->belongsTo(Empresa::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function cliente(): BelongsTo
+    {
+        return $this->belongsTo(Cliente::class);
+    }
+
     /**
-     * Relacionamento: Uma venda tem muitos itens.
+     * Uma Venda TEM MUITOS Itens.
      */
     public function items(): HasMany
     {
         return $this->hasMany(VendaItem::class);
     }
 
-    public function itens(): HasMany
-    {
-        // O truque é simplesmente chamar o método original aqui dentro.
-        return $this->items();
-    }
-    public function empresa(): BelongsTo
-    {
-        return $this->belongsTo(Empresa::class);
-    }
-
     /**
-     * Relacionamento: Uma venda tem muitos pagamentos.
+     * Uma Venda TEM MUITOS Pagamentos.
+     * ESTA É A CORREÇÃO PRINCIPAL: Apontando para o modelo correto 'VendaPagamento'.
      */
     public function pagamentos(): HasMany
     {
-        return $this->hasMany(Pagamento::class);
+        return $this->hasMany(VendaPagamento::class);
     }
-
-    /**
-     * Relacionamento: Uma venda pertence a um usuário (vendedor).
-     */
-    public function user(): BelongsTo
+    
+    protected static function booted(): void
     {
-        // Assumindo que o model User padrão do Laravel seja usado.
-        return $this->belongsTo(User::class);
-    }
-
-    public function nfe()
-{
-    // Uma venda pode ter uma NFe.
-    return $this->hasOne(Nfe::class);
-}
-
-    /**
-     * Relacionamento: Uma venda pertence a um cliente.
-     */
-    public function cliente(): BelongsTo
-    {
-        // Certifique-se de que você tenha um model App\Models\Cliente
-        return $this->belongsTo(Cliente::class);
+        static::addGlobalScope(new EmpresaScope);
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Venda;
 use App\Models\Pagamento;
 use App\Models\FormaPagamento; // 1. IMPORTAMOS O MODEL DE FORMAS DE PAGAMENTO
 use Livewire\Component;
+
 use Illuminate\Support\Facades\DB;
 
 class Pdv extends Component

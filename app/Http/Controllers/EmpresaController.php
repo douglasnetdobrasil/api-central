@@ -44,6 +44,7 @@ class EmpresaController extends Controller
             'codigo_uf' => 'required|integer|digits:2',
             'csc_nfe' => 'required|string|max:100',
             'csc_id_nfe' => 'required|string|max:10',
+            'nfe_proximo_numero' => 'nullable|integer|min:1',
         ]);
 
         if ($request->hasFile('certificado_a1_path')) {
@@ -82,6 +83,7 @@ class EmpresaController extends Controller
             'codigo_uf' => 'required|integer|digits:2',
             'csc_nfe' => 'required|string|max:100',
             'csc_id_nfe' => 'required|string|max:10',
+            'nfe_proximo_numero' => 'nullable|integer|min:1',
         ]);
     
         if ($request->hasFile('certificado_a1_path')) {

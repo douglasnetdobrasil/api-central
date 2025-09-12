@@ -36,6 +36,7 @@ class Empresa extends Model
         'codigo_uf',
         'csc_nfe',
         'csc_id_nfe',
+        'nfe_proximo_numero',
     ];
 
     /**

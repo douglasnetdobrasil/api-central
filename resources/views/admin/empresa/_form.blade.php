@@ -81,6 +81,14 @@
                 </select>
                 <x-input-error class="mt-2" :messages="$errors->get('crt')" />
             </div>
+            <div class="md:col-span-2">
+            <x-input-label for="nfe_proximo_numero" value="Próximo Número da NF-e (Série 1)" />
+            <x-text-input id="nfe_proximo_numero" name="nfe_proximo_numero" type="number" class="mt-1 block w-full" :value="old('nfe_proximo_numero', $empresa->nfe_proximo_numero)" />
+            <x-input-error class="mt-2" :messages="$errors->get('nfe_proximo_numero')" />
+            <p class="text-xs text-gray-500 mt-1">
+                Preencha este campo apenas para empresas que estão migrando de outro sistema. Informe o número da PRÓXIMA nota a ser emitida. Ex: se a última foi 99, informe 100.
+            </p>
+        </div>
             <div>
                 <x-input-label for="ambiente_nfe" value="Ambiente de Emissão de NF-e *" />
                 <select name="ambiente_nfe" id="ambiente_nfe" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm" required>
