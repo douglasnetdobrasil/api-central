@@ -33,6 +33,8 @@ class Nfe extends Model
         'caminho_danfe',
         'justificativa_cancelamento',
         'mensagem_erro',
+        'protocolo_autorizacao',
+        'cce_sequencia_evento',
     ];
 
     /**
@@ -50,4 +52,9 @@ class Nfe extends Model
     {
         return $this->belongsTo(Empresa::class);
     }
+
+    public function cces()
+{
+    return $this->hasMany(Cce::class)->orderBy('sequencia_evento', 'asc');
+}
 }

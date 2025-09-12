@@ -76,6 +76,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/{nfe}/cancelar', [NFeController::class, 'cancelar'])->name('cancelar');
         Route::post('/preparar-agrupada', [NFeController::class, 'prepararEmissaoAgrupada'])->name('prepararAgrupada');
         Route::post('/store', [NFeController::class, 'store'])->name('store');
+        Route::post('/nfe/{nfe}/cancelar', [NFeController::class, 'cancelar'])->name('nfe.cancelar');
+        Route::post('/{nfe}/cce', [NFeController::class, 'enviarCCe'])->name('nfe.cce.enviar');
+        Route::get('/cce/{cce}/pdf', [NFeController::class, 'downloadDacce'])->name('cce.pdf');
     });
 
     // Utilitários (Original)

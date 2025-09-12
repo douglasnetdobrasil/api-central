@@ -128,7 +128,7 @@
                 document.getElementById('bairro').value = data.bairro || '';
                 document.getElementById('cidade').value = data.municipio || '';
                 document.getElementById('estado').value = data.uf || '';
-                document.getElementById('codigo_municipio').value = data.codigo_municipio || '';
+                document.getElementById('codigo_municipio').value = data.codigo_municipio_ibge || '';
 
                 alert('Dados do CNPJ preenchidos com sucesso!');
             } catch (error) {

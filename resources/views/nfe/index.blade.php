@@ -75,7 +75,7 @@
                                         <td class="px-4 py-4 whitespace-nowrap">{{ $nfe->numero_nfe }} / {{ $nfe->serie }}</td>
                                         <td class="px-4 py-4 whitespace-nowrap">{{ $nfe->venda->cliente->nome ?? 'Emissão Avulsa' }}</td>
                                         <td class="px-4 py-4 whitespace-nowrap">{{ $nfe->created_at->format('d/m/Y H:i') }}</td>
-                                        <td class="px-4 py-4 whitespace-nowrap">R$ 0,00</td>
+                                        <td class="px-4 py-4 whitespace-nowrap">R$ {{ number_format($nfe->venda->total ?? 0, 2, ',', '.') }}</td>
                                         <td class="px-4 py-4 whitespace-nowrap">
                                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                                 @if($nfe->status == 'autorizada') bg-green-100 text-green-800 @endif
@@ -97,13 +97,31 @@
                                                 <div x-show="open" @click.away="open = false"
                                                      x-transition
                                                      class="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none z-10" style="display: none;">
-                                                    <div class="py-1">
+                                                   
+                                                     @if ($nfe->status == 'cancelada')
+                                                     <a href="{{ route('nfe.danfe', $nfe) }}" target="_blank" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Ver DANFE</a>
+                                                        <a href="{{ route('nfe.xml', $nfe) }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Baixar XML</a>
+                                                     @endif
+                                                   
+                                                   
+                                                     @if ($nfe->status == 'autorizada')
+                                                     <div class="py-1">
                                                         <a href="{{ route('nfe.danfe', $nfe) }}" target="_blank" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Ver DANFE</a>
                                                         <a href="{{ route('nfe.xml', $nfe) }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Baixar XML</a>
+                                                        
+                                                        
                                                         <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                                                        <button @click="$dispatch('open-cce-modal', { id: {{ $nfe->id }} }); open = false" type="button" 
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+            Carta de Correção
+        </button>
+                                                        
                                                         <button @click="$dispatch('open-cancel-modal', { id: {{ $nfe->id }} }); open = false" type="button" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-600">
                                                             Cancelar NF-e
                                                         </button>
+                                                        @endif
+
+                                                        
                                                     </div>
                                                 </div>
                                             </div>
@@ -124,6 +142,83 @@
         </div>
     </div>
 
-    <div x-data="{ open: false, nfeId: null }" @open-cancel-modal.window="open = true; nfeId = $event.detail.id" x-show="open" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true" style="display: none;">
+    <div x-data="{ open: false, nfeId: null, actionUrl: '' }" 
+     @open-cancel-modal.window="open = true; nfeId = $event.detail.id; actionUrl = '{{ route('nfe.index') }}/' + nfeId + '/cancelar'" 
+     x-show="open" 
+     class="fixed inset-0 z-50 overflow-y-auto" 
+     aria-labelledby="modal-title" role="dialog" aria-modal="true" style="display: none;">
+
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div x-show="open" x-transition.opacity class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+        <div x-show="open" x-transition 
+             class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+
+            <form :action="actionUrl" method="POST">
+                @csrf
+                <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-gray-100" id="modal-title">
+                        Cancelar NF-e
+                    </h3>
+                    <div class="mt-2">
+                        <label for="justificativa" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Justificativa (mínimo 15 caracteres)
+                        </label>
+                        <textarea id="justificativa" name="justificativa" rows="4" required minlength="15"
+                                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"></textarea>
+                    </div>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 sm:ml-3 sm:w-auto sm:text-sm">
+                        Confirmar Cancelamento
+                    </button>
+                    <button @click="open = false" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+                        Fechar
+                    </button>
+                </div>
+            </form>
         </div>
+    </div>
+</div>
+<div x-data="{ open: false, nfeId: null, actionUrl: '' }" 
+     @open-cce-modal.window="open = true; nfeId = $event.detail.id; actionUrl = '{{ route('nfe.index') }}/' + nfeId + '/cce'" 
+     x-show="open" 
+     class="fixed inset-0 z-50 overflow-y-auto" 
+     aria-labelledby="modal-title" role="dialog" aria-modal="true" style="display: none;">
+
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div x-show="open" x-transition.opacity class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+        <div x-show="open" x-transition 
+             class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+
+            <form :action="actionUrl" method="POST">
+                @csrf
+                <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-gray-100" id="modal-title">
+                        Emitir Carta de Correção (CC-e)
+                    </h3>
+                    <div class="mt-2">
+                        <label for="correcao" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Texto da Correção (mínimo 15 caracteres)
+                        </label>
+                        <textarea id="correcao" name="correcao" rows="6" required minlength="15" maxlength="1000"
+                                  placeholder="Ex: Altera-se o número do endereço do destinatário de 123 para 321."
+                                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"></textarea>
+                    </div>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm">
+                        Enviar CC-e
+                    </button>
+                    <button @click="open = false" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+                        Fechar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 </x-app-layout>

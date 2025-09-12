@@ -146,31 +146,59 @@ class NFeController extends Controller
         if ($nfe->empresa_id !== Auth::user()->empresa_id) {
             abort(403, 'Acesso não autorizado.');
         }
-
-        if ($nfe->status === 'cancelada') {
-            return back()->with('error', 'Esta NF-e já foi cancelada.');
+        if ($nfe->status !== 'autorizada') {
+            return back()->with('error', 'Apenas NF-e autorizadas podem ser canceladas.');
         }
-
+    
         $validated = $request->validate([
-            'justificativa' => 'required|string|min:15',
+            'justificativa' => 'required|string|min:15|max:255',
         ]);
-
-        // Aciona o serviço que se comunica com a SEFAZ
-        // $resultado = $nfeService->cancelar($nfe, $validated['justificativa']);
-
-        // --- SIMULAÇÃO DO RESULTADO (remover após integrar com o serviço real) ---
-        $nfe->status = 'cancelada';
-        $nfe->justificativa_cancelamento = $validated['justificativa'];
-        $nfe->save();
-        $resultado = ['success' => true, 'message' => 'NF-e cancelada com sucesso (Simulação).'];
-        // --- FIM DA SIMULAÇÃO ---
-
+    
+        // Aciona o serviço real que se comunica com a SEFAZ
+        $resultado = $nfeService->cancelar($nfe, $validated['justificativa']);
+    
         if ($resultado['success']) {
             return redirect()->route('nfe.index')->with('success', $resultado['message']);
         } else {
             return back()->with('error', 'Falha ao cancelar NF-e: ' . $resultado['message']);
         }
     }
+
+    public function enviarCCe(Nfe $nfe, Request $request, NFeService $nfeService)
+{
+    if ($nfe->empresa_id !== Auth::user()->empresa_id) {
+        abort(403, 'Acesso não autorizado.');
+    }
+    if ($nfe->status !== 'autorizada') {
+        return back()->with('error', 'Apenas NF-e autorizadas podem receber Carta de Correção.');
+    }
+
+    $validated = $request->validate([
+        'correcao' => 'required|string|min:15|max:1000',
+    ]);
+
+    $resultado = $nfeService->cartaCorrecao($nfe, $validated['correcao']);
+
+    if ($resultado['success']) {
+        return redirect()->route('nfe.index')->with('success', $resultado['message']);
+    } else {
+        return back()->with('error', 'Falha ao emitir CC-e: ' . $resultado['message']);
+    }
+}
+
+public function downloadDacce(Cce $cce)
+{
+    // Validação de segurança para garantir que a CCe pertence à empresa do usuário
+    if ($cce->nfe->empresa_id !== Auth::user()->empresa_id) {
+        abort(403, 'Acesso não autorizado.');
+    }
+
+    if (Storage::disk('private')->exists($cce->caminho_pdf)) {
+        return Storage::disk('private')->response($cce->caminho_pdf);
+    }
+
+    return back()->with('error', 'Arquivo DACCE (PDF da CC-e) não encontrado.');
+}
 
     public function importarPedidosView()
     {

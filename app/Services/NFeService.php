@@ -12,6 +12,8 @@ use NFePHP\NFe\Common\Standardize;
 use App\Models\Empresa;
 use NFePHP\NFe\Complements;
 use App\Models\Nfe;
+use NFePHP\NFe\Events;
+use NFePHP\DA\CCe;
 use App\Models\Venda;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -159,8 +161,79 @@ class NFeService
         }
     }
 
+    public function cartaCorrecao(Nfe $nfe, string $correcao): array
+{
+    DB::beginTransaction();
+    try {
+        $this->bootstrap($nfe->empresa);
+
+        // Usa o método sefazCCe da classe Tools
+        $response = $this->tools->sefazCCe(
+            $nfe->chave_acesso,
+            $correcao,
+            $nfe->cce_sequencia_evento // Número da sequência (1, 2, 3...)
+        );
+
+        $st = new Standardize($response);
+        $std = $st->toStd();
+
+        // 135 = Evento registrado e vinculado a NF-e (sucesso)
+        if ($std->cStat == '135') {
+            // Incrementa a sequência no banco para a próxima CC-e
+            $nfe->increment('cce_sequencia_evento');
+
+            // Lógica para salvar os arquivos da CC-e (opcional, mas recomendado)
+            $this->handleCceSuccess($nfe, $response);
+
+            DB::commit();
+            return ['success' => true, 'message' => 'Carta de Correção emitida com sucesso!'];
+        } else {
+            throw new \Exception("[{$std->cStat}] {$std->xMotivo}");
+        }
+    } catch (\Exception $e) {
+        DB::rollBack();
+        // Também tratamos o caso de sucesso "128" que vem como exceção
+        if (str_contains($e->getMessage(), '[128] Lote de Evento Processado')) {
+            $nfe->increment('cce_sequencia_evento');
+            DB::commit();
+            return ['success' => true, 'message' => 'Carta de Correção processada com sucesso (Status SEFAZ: 128)!'];
+        }
+        return ['success' => false, 'message' => $e->getMessage()];
+    }
+}
+
+private function handleCceSuccess(Nfe $nfe, string $responseXml)
+{
+    $chave = $nfe->chave_acesso;
+    // A sequência é o valor ATUAL no banco, pois o increment já foi feito.
+    $sequencia = $nfe->cce_sequencia_evento; 
+    $anoMes = date('Y-m');
+
+    $pathXmlCce = "nfe/xml/{$anoMes}/{$chave}-cce-{$sequencia}.xml";
+    Storage::disk('private')->put($pathXmlCce, $responseXml);
+
+    $xmlAutorizado = Storage::disk('private')->get($nfe->caminho_xml);
+    $dacce = new CCe($xmlAutorizado, $responseXml);
+    $pdf = $dacce->render();
+    $pathPdfCce = "nfe/danfe/{$anoMes}/{$chave}-cce-{$sequencia}.pdf";
+    Storage::disk('private')->put($pathPdfCce, $pdf);
+
+    // Salva os caminhos na nova tabela
+    Cce::create([
+        'nfe_id' => $nfe->id,
+        'sequencia_evento' => $sequencia,
+        'caminho_xml' => $pathXmlCce,
+        'caminho_pdf' => $pathPdfCce,
+    ]);
+}
+
     private function handleSuccess($protocolo, $xmlAssinado, Nfe $nfeRecord, $chave)
     {
+        // Extrai o número do protocolo do XML de resposta
+        $stProt = new Standardize($protocolo);
+        $stdProt = $stProt->toStd();
+        $numeroProtocolo = $stdProt->protNFe->infProt->nProt ?? null;
+    
         $xmlAutorizado = Complements::toAuthorize($xmlAssinado, $protocolo);
         $anoMes = date('Y-m');
         $pathXml = "nfe/xml/{$anoMes}/{$chave}.xml";
@@ -172,8 +245,11 @@ class NFeService
         Storage::disk('private')->put($pathDanfe, $pdf);
         
         $nfeRecord->update([
-            'status' => 'autorizada', 'chave_acesso' => $chave,
-            'caminho_xml' => $pathXml, 'caminho_danfe' => $pathDanfe,
+            'status' => 'autorizada',
+            'chave_acesso' => $chave,
+            'protocolo_autorizacao' => $numeroProtocolo, // <-- SALVA O PROTOCOLO
+            'caminho_xml' => $pathXml,
+            'caminho_danfe' => $pathDanfe,
         ]);
     }
 
@@ -328,7 +404,73 @@ class NFeService
             // ======================= FIM DA CORREÇÃO FINAL PIS/COFINS =======================
         }
     }
+
+    public function cancelar(Nfe $nfe, string $justificativa): array
+    {
+        DB::beginTransaction();
+        try {
+            $this->bootstrap($nfe->empresa);
     
+            if (empty($nfe->protocolo_autorizacao)) {
+                throw new \Exception('O número do protocolo de autorização não foi encontrado para esta NF-e.');
+            }
+    
+            $response = $this->tools->sefazCancela(
+                $nfe->chave_acesso,
+                $justificativa,
+                $nfe->protocolo_autorizacao
+            );
+    
+            $st = new Standardize($response);
+            $std = $st->toStd();
+    
+            // Cenário 1: Sucesso padrão (ex: 135 - Evento Vinculado)
+            if ($std->cStat == '135') {
+                $this->handleCancelSuccess($nfe, $justificativa, $response);
+                DB::commit();
+                return ['success' => true, 'message' => 'NF-e cancelada com sucesso!'];
+            } else {
+                // Outras respostas da SEFAZ que não são exceções, mas também não são sucesso
+                throw new \Exception("[{$std->cStat}] {$std->xMotivo}");
+            }
+    
+        } catch (\Exception $e) {
+            // ======================= AJUSTE FINAL =======================
+            // Cenário 2: Sucesso retornado como exceção (código 128)
+            if (str_contains($e->getMessage(), '[128] Lote de Evento Processado')) {
+                
+                // Se a exceção for o status 128, consideramos como SUCESSO.
+                // A única limitação é que não conseguimos o XML de resposta para anexar,
+                // mas o mais importante é atualizar o status local.
+                $nfe->update([
+                    'status' => 'cancelada',
+                    'justificativa_cancelamento' => $justificativa,
+                ]);
+                DB::commit();
+                return ['success' => true, 'message' => 'NF-e cancelada com sucesso (Status SEFAZ: 128)!'];
+    
+            } else {
+                // Cenário 3: Erro real (qualquer outra exceção)
+                DB::rollBack();
+                return ['success' => false, 'message' => $e->getMessage()];
+            }
+        }
+    }
+    
+    /**
+     * Método auxiliar para tratar a lógica de sucesso do cancelamento.
+     */
+    private function handleCancelSuccess(Nfe $nfe, string $justificativa, string $responseXml)
+    {
+        $nfe->update([
+            'status' => 'cancelada',
+            'justificativa_cancelamento' => $justificativa,
+        ]);
+        
+        $xmlAutorizado = Storage::disk('private')->get($nfe->caminho_xml);
+        $xmlCancelado = Complements::cancelRegister($xmlAutorizado, $responseXml);
+        Storage::disk('private')->put($nfe->caminho_xml, $xmlCancelado);
+    }
     private function buildTotals()
     {
         $this->nfe->tagICMSTot(new stdClass());

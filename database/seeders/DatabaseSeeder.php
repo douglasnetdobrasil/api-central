@@ -32,7 +32,8 @@ class DatabaseSeeder extends Seeder
             EmpresaSeeder::class,
             ConfiguracoesSeeder::class,
             CategoriaProdutoSeeder::class,
-            UnidadeDeMedidaSeeder::class
+            UnidadeDeMedidaSeeder::class,
+            FormaPagamentoSeeder::class,
             
             // ...seus outros seeders aqui
         ]);

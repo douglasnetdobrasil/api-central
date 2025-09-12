@@ -202,7 +202,7 @@
                     document.getElementById('telefone').value = data.ddd_telefone_1 || '';
                     
                     // ===== A CORREÇÃO ESTÁ AQUI =====
-                    document.getElementById('codigo_municipio').value = data.codigo_municipio || '';
+                    document.getElementById('codigo_municipio').value = data.codigo_municipio_ibge || '';
                     // ===================================
                 })
                 .catch(error => {
