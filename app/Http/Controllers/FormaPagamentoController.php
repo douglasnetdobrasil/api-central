@@ -32,6 +32,7 @@ class FormaPagamentoController extends Controller
             'tipo' => 'required|in:a_vista,a_prazo',
             'numero_parcelas' => 'required|integer|min:1',
             'dias_intervalo' => 'required|integer|min:0',
+            'codigo_sefaz' => 'required|string|max:2',
             'ativo' => 'nullable|boolean',
         ]);
         
@@ -56,6 +57,7 @@ class FormaPagamentoController extends Controller
             'tipo' => 'required|in:a_vista,a_prazo',
             'numero_parcelas' => 'required|integer|min:1',
             'dias_intervalo' => 'required|integer|min:0',
+            'codigo_sefaz' => 'required|string|max:2',
             'ativo' => 'nullable|boolean',
         ]);
         

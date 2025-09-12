@@ -19,6 +19,7 @@ class FormaPagamento extends Model
         'numero_parcelas',
         'dias_intervalo',
         'ativo',
+        'codigo_sefaz',
     ];
 
     protected $casts = [

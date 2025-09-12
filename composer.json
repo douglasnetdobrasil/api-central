@@ -59,6 +59,7 @@
     "config": {
         "optimize-autoloader": true,
         "preferred-install": "dist",
+        "vendor-dir": "e:/projetos/api_central_erp/vendor",
         "sort-packages": true,
         "allow-plugins": {
             "pestphp/pest-plugin": true,

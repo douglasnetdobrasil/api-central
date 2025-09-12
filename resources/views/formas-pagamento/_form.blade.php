@@ -7,6 +7,13 @@
                           placeholder="Ex: Cartão 30/60 DDL" />
         </div>
         <div>
+            <x-input-label for="codigo_sefaz" value="Código da SEFAZ (tPag)" />
+            <x-text-input id="codigo_sefaz" name="codigo_sefaz" type="text" class="mt-1 block w-full" 
+                          :value="old('codigo_sefaz', $formaPagamento->codigo_sefaz ?? '')" required 
+                          placeholder="Ex: 01, 03, 17" />
+            <p class="text-xs text-gray-500 mt-1">01=Dinheiro, 03=Cartão Crédito, 17=PIX, 99=Outros</p>
+        </div>
+        <div>
             <x-input-label for="tipo" value="Tipo" />
             <select name="tipo" id="tipo" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
                 <option value="a_vista" @selected(old('tipo', $formaPagamento->tipo ?? '') == 'a_vista')>À Vista</option>

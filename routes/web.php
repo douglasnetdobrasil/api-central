@@ -92,6 +92,20 @@ Route::middleware('auth')->group(function () {
         Route::post('configuracoes', [ConfiguracaoController::class, 'update'])->name('configuracoes.update');
     });
     // ===== FIM DAS NOVAS ROTAS =====
+
+    Route::get('/teste-nfe', function () {
+        try {
+            // Tenta criar um objeto da classe que está dando erro
+            $config = new \NFePHP\Sped\Common\Config('{}');
+            
+            // Se conseguir, a instalação está CORRETA!
+            dd('SUCESSO! A classe Config foi encontrada e carregada.', $config);
+    
+        } catch (\Throwable $e) {
+            // Se falhar, mostrará o erro novamente
+            dd('FALHA. A classe ainda não foi encontrada.', $e->getMessage());
+        }
+    });
 });
 
 require __DIR__.'/auth.php';
