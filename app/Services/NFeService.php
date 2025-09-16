@@ -13,7 +13,8 @@ use App\Models\Empresa;
 use NFePHP\NFe\Complements;
 use App\Models\Nfe;
 use NFePHP\NFe\Events;
-use NFePHP\DA\CCe;
+use NFePHP\DA\Common\CCe;
+use NFePHP\NFe\Evento;
 use App\Models\Venda;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -162,70 +163,76 @@ class NFeService
     }
 
     public function cartaCorrecao(Nfe $nfe, string $correcao): array
-{
-    DB::beginTransaction();
-    try {
-        $this->bootstrap($nfe->empresa);
-
-        // Usa o método sefazCCe da classe Tools
-        $response = $this->tools->sefazCCe(
-            $nfe->chave_acesso,
-            $correcao,
-            $nfe->cce_sequencia_evento // Número da sequência (1, 2, 3...)
-        );
-
-        $st = new Standardize($response);
-        $std = $st->toStd();
-
-        // 135 = Evento registrado e vinculado a NF-e (sucesso)
-        if ($std->cStat == '135') {
-            // Incrementa a sequência no banco para a próxima CC-e
-            $nfe->increment('cce_sequencia_evento');
-
-            // Lógica para salvar os arquivos da CC-e (opcional, mas recomendado)
-            $this->handleCceSuccess($nfe, $response);
-
-            DB::commit();
-            return ['success' => true, 'message' => 'Carta de Correção emitida com sucesso!'];
-        } else {
-            throw new \Exception("[{$std->cStat}] {$std->xMotivo}");
+    {
+        DB::beginTransaction();
+        try {
+            $this->bootstrap($nfe->empresa);
+    
+            $response = $this->tools->sefazCCe(
+                $nfe->chave_acesso,
+                $correcao,
+                $nfe->cce_sequencia_evento
+            );
+    
+            $st = new Standardize($response);
+            $std = $st->toStd();
+    
+            // ======================= A CORREÇÃO ESTÁ AQUI =======================
+            // Verificamos se o status é '135' OU '128' para considerarmos sucesso.
+            if (in_array($std->cStat, ['135', '128'])) {
+            // ===================================================================
+                
+                // Incrementa a sequência no banco para a próxima CC-e
+                $nfe->increment('cce_sequencia_evento');
+    
+                // Chama a função que salva os arquivos e o registro na tabela 'cces'
+                $this->handleCceSuccess($nfe, $response);
+    
+                DB::commit();
+                $message = ($std->cStat == 128) ? 'processada com sucesso (Status SEFAZ: 128)!' : 'emitida com sucesso!';
+                return ['success' => true, 'message' => "Carta de Correção {$message}"];
+            } else {
+                // Se for qualquer outro status, consideramos como erro.
+                throw new \Exception("[{$std->cStat}] {$std->xMotivo}");
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return ['success' => false, 'message' => $e->getMessage()];
         }
-    } catch (\Exception $e) {
-        DB::rollBack();
-        // Também tratamos o caso de sucesso "128" que vem como exceção
-        if (str_contains($e->getMessage(), '[128] Lote de Evento Processado')) {
-            $nfe->increment('cce_sequencia_evento');
-            DB::commit();
-            return ['success' => true, 'message' => 'Carta de Correção processada com sucesso (Status SEFAZ: 128)!'];
-        }
-        return ['success' => false, 'message' => $e->getMessage()];
     }
-}
 
-private function handleCceSuccess(Nfe $nfe, string $responseXml)
-{
-    $chave = $nfe->chave_acesso;
-    // A sequência é o valor ATUAL no banco, pois o increment já foi feito.
-    $sequencia = $nfe->cce_sequencia_evento; 
-    $anoMes = date('Y-m');
-
-    $pathXmlCce = "nfe/xml/{$anoMes}/{$chave}-cce-{$sequencia}.xml";
-    Storage::disk('private')->put($pathXmlCce, $responseXml);
-
-    $xmlAutorizado = Storage::disk('private')->get($nfe->caminho_xml);
-    $dacce = new CCe($xmlAutorizado, $responseXml);
-    $pdf = $dacce->render();
-    $pathPdfCce = "nfe/danfe/{$anoMes}/{$chave}-cce-{$sequencia}.pdf";
-    Storage::disk('private')->put($pathPdfCce, $pdf);
-
-    // Salva os caminhos na nova tabela
-    Cce::create([
-        'nfe_id' => $nfe->id,
-        'sequencia_evento' => $sequencia,
-        'caminho_xml' => $pathXmlCce,
-        'caminho_pdf' => $pathPdfCce,
-    ]);
-}
+    private function handleCceSuccess(Nfe $nfe, string $responseXml)
+    {
+        try {
+            $chave = $nfe->chave_acesso;
+            // A sequência é o valor ATUAL no banco, pois o increment já foi feito.
+            $sequencia = $nfe->cce_sequencia_evento;
+            $anoMes = date('Y-m');
+    
+            $pathXmlCce = "nfe/xml/{$anoMes}/{$chave}-cce-{$sequencia}.xml";
+            Storage::disk('private')->put($pathXmlCce, $responseXml);
+    
+            $xmlAutorizado = Storage::disk('private')->get($nfe->caminho_xml);
+            $dacce = new CCe($xmlAutorizado, $responseXml);
+            $pdf = $dacce->render();
+            $pathPdfCce = "nfe/danfe/{$anoMes}/{$chave}-cce-{$sequencia}.pdf";
+            Storage::disk('private')->put($pathPdfCce, $pdf);
+    
+            // Salva os caminhos na nova tabela
+            Cce::create([
+                'nfe_id' => $nfe->id,
+                'sequencia_evento' => $sequencia,
+                'caminho_xml' => $pathXmlCce,
+                'caminho_pdf' => $pathPdfCce,
+            ]);
+    
+        } catch (\Exception $e) {
+            // ESTE É O TESTE FINAL: VAMOS PARAR E EXIBIR O ERRO EXATO DO BANCO DE DADOS
+            // O DB::rollBack() é importante para não deixar a transação aberta
+            DB::rollBack();
+            dd($e);
+        }
+    }
 
     private function handleSuccess($protocolo, $xmlAssinado, Nfe $nfeRecord, $chave)
     {

@@ -3,7 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CompraWebController;
-use App\Http\Controllers\CategoriaController; 
+use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\TransportadoraController;
 use App\Http\Controllers\FormaPagamentoController;
@@ -17,6 +17,7 @@ use App\Http\Controllers\FornecedorController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\UserController;
+use App\Livewire\NfeAvulsaCreate;
 // ADICIONE OS NOVOS CONTROLLERS
 use App\Http\Controllers\PerfilFiscalController;
 use App\Http\Controllers\ConfiguracaoController;
@@ -36,10 +37,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     
     // Compras (Original)
-    Route::post('/compras/importar-xml', [CompraWebController::class, 'importarXml'])->name('compras.importarXml'); 
+    Route::post('/compras/importar-xml', [CompraWebController::class, 'importarXml'])->name('compras.importarXml');
     Route::get('/compras/importacao/revisar', [CompraWebController::class, 'revisarImportacao'])->name('compras.revisarImportacao');
     Route::post('/compras/importacao/salvar', [CompraWebController::class, 'salvarImportacao'])->name('compras.salvarImportacao');
-    Route::resource('compras', CompraWebController::class); 
+    Route::resource('compras', CompraWebController::class);
 
     // Cadastros (Original)
     Route::resource('categorias', CategoriaController::class);
@@ -56,6 +57,10 @@ Route::middleware('auth')->group(function () {
         Route::resource('usuarios', UserController::class);
         Route::resource('empresa', EmpresaController::class)->except(['show']);
     });
+
+
+     // Rota para a busca de clientes via API para o Select2
+     Route::get('/api/clientes/search', [App\Http\Controllers\ClienteController::class, 'search'])->name('api.clientes.search');
 
     // Vendas e Orçamentos (Original)
     Route::resource('orcamentos', OrcamentoController::class);
@@ -76,10 +81,31 @@ Route::middleware('auth')->group(function () {
         Route::post('/{nfe}/cancelar', [NFeController::class, 'cancelar'])->name('cancelar');
         Route::post('/preparar-agrupada', [NFeController::class, 'prepararEmissaoAgrupada'])->name('prepararAgrupada');
         Route::post('/store', [NFeController::class, 'store'])->name('store');
-        Route::post('/nfe/{nfe}/cancelar', [NFeController::class, 'cancelar'])->name('nfe.cancelar');
+        // A rota abaixo estava duplicada, mantive a primeira que é mais específica
+        // Route::post('/nfe/{nfe}/cancelar', [NFeController::class, 'cancelar'])->name('nfe.cancelar');
         Route::post('/{nfe}/cce', [NFeController::class, 'enviarCCe'])->name('nfe.cce.enviar');
         Route::get('/cce/{cce}/pdf', [NFeController::class, 'downloadDacce'])->name('cce.pdf');
+
+        // =========================================================================
+        // ||||||||||||||||||||||| INÍCIO DA CORREÇÃO |||||||||||||||||||||||||||||
+        // =========================================================================
+
+        // Rotas para o fluxo de NF-e Avulsa com Rascunho
+        // A rota foi corrigida para não duplicar o prefixo 'nfe'
+      
+
+        // =========================================================================
+        // ||||||||||||||||||||||||| FIM DA CORREÇÃO |||||||||||||||||||||||||||||||
+        // =========================================================================
     });
+
+    Route::get('/criar-avulsa', NfeAvulsaCreate::class)->name('criarAvulsa');
+        
+    // As outras rotas de rascunho foram mantidas como estavam
+    Route::post('/rascunho', [NFeController::class, 'storeRascunho'])->name('rascunho.store');
+    Route::get('/rascunho/{nfe}/edit', [NFeController::class, 'editRascunho'])->name('rascunho.edit');
+    Route::put('/rascunho/{nfe}', [NFeController::class, 'updateRascunho'])->name('rascunho.update');
+    Route::post('/rascunho/{nfe}/emitir', [NFeController::class, 'emitirRascunho'])->name('rascunho.emitir');
 
     // Utilitários (Original)
     Route::get('/consulta/cnpj/{cnpj}', [UtilController::class, 'consultarCnpj'])->name('consulta.cnpj');

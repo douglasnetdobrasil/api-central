@@ -57,4 +57,9 @@ class Nfe extends Model
 {
     return $this->hasMany(Cce::class)->orderBy('sequencia_evento', 'asc');
 }
+
+public function items()
+{
+    return $this->hasMany(NfeItem::class);
+}
 }

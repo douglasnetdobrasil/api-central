@@ -9,6 +9,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use NFePHP\NFe\Config;
+use NFePHP\NFe\Evento;
+use App\Models\VendaItem; // Model para os itens da venda
+use App\Models\Pagamento; // Model para os pagamentos
+use App\Models\FormaPagamento; // Model para as formas de pagamento
+use App\Models\Cliente;
+use App\Models\Produto;
+use Illuminate\Support\Collection;
 
 class NFeController extends Controller
 {
@@ -36,10 +43,9 @@ class NFeController extends Controller
         }
 
         // Adiciona o eager loading para otimizar a consulta e ordena pelos mais recentes
-        $notasEmitidas = $query->with('venda.cliente')
-                               ->latest()
-                               ->paginate(15);
-
+        $notasEmitidas = $query->with('venda.cliente', 'cces') // Adiciona 'cces' aqui
+        ->latest()
+        ->paginate(15);
         // Retorna a view, passando a coleção de notas e também o termo de pesquisa (para manter no campo do formulário)
         return view('nfe.index', [
             'notasEmitidas' => $notasEmitidas,
@@ -69,6 +75,180 @@ class NFeController extends Controller
             return back()->with('error', 'Falha ao emitir NF-e: ' . $resultado['message']);
         }
     }
+
+    public function criarAvulsa()
+    {
+        $empresaId = Auth::user()->empresa_id;
+
+        // Buscamos dados para preencher os selects do formulário
+        $clientes = Cliente::where('empresa_id', $empresaId)->orderBy('nome')->get();
+        $produtos = Produto::where('empresa_id', $empresaId)->orderBy('nome')->get();
+        // Adicione outras buscas se necessário (ex: transportadoras)
+
+        return view('nfe.criar-avulsa', compact('clientes', 'produtos'));
+    }
+
+
+
+    public function storeAvulsa(Request $request, NFeService $nfeService)
+    {
+        // Validação dos dados recebidos do formulário (essencial!)
+        $validated = $request->validate([
+            'cliente_id' => 'required|exists:clientes,id',
+            'produtos' => 'required|array|min:1',
+            'produtos.*.id' => 'required|exists:produtos,id',
+            'produtos.*.quantidade' => 'required|numeric|min:0.01',
+            'produtos.*.preco' => 'required|numeric|min:0.01',
+            // Adicione aqui validações para frete, pagamento, etc.
+        ]);
+
+        try {
+            // 1. Montar um objeto "Venda" virtual em memória
+            $vendaVirtual = new Venda();
+            
+            // 2. Anexar as Relações Essenciais
+            $vendaVirtual->setRelation('empresa', Auth::user()->empresa);
+            $vendaVirtual->setRelation('cliente', Cliente::find($validated['cliente_id']));
+
+            // 3. Montar a coleção de Itens
+            $itens = new Collection();
+            $totalVenda = 0;
+            foreach ($validated['produtos'] as $produtoData) {
+                $produto = Produto::find($produtoData['id']);
+                $item = new VendaItem([
+                    'produto_id' => $produto->id,
+                    'quantidade' => $produtoData['quantidade'],
+                    'preco_unitario' => $produtoData['preco'],
+                    'subtotal_item' => $produtoData['quantidade'] * $produtoData['preco'],
+                ]);
+                $item->setRelation('produto', $produto); // Anexa o produto ao item
+                $itens->push($item);
+                $totalVenda += $item->subtotal_item;
+            }
+            $vendaVirtual->setRelation('items', $itens); // Note o 's' em 'items' para corresponder à relação
+            $vendaVirtual->total = $totalVenda;
+            
+            // 4. Montar a coleção de Pagamentos (exemplo simples)
+            $pagamentos = new Collection();
+            $formaPagamento = FormaPagamento::first(); // Exemplo: pegando a primeira forma de pagamento
+            $pagamento = new Pagamento([
+                'valor' => $totalVenda,
+            ]);
+            $pagamento->setRelation('forma', $formaPagamento);
+            $pagamentos->push($pagamento);
+            $vendaVirtual->setRelation('pagamentos', $pagamentos);
+
+            // 5. Chamar o NFeService com o objeto virtual
+            // O service não saberá a diferença, pois o objeto tem a estrutura que ele espera.
+            // Passamos null para os IDs da venda original, pois não existem.
+            $resultado = $nfeService->emitir($vendaVirtual, null);
+
+            // 6. Tratar o retorno
+            if ($resultado['success']) {
+                return redirect()->route('nfe.index')->with('success', $resultado['message']);
+            } else {
+                return back()->with('error', 'Falha ao emitir NF-e Avulsa: ' . $resultado['message'])->withInput();
+            }
+
+        } catch (\Exception $e) {
+            return back()->with('error', 'Ocorreu um erro inesperado: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    public function storeOrUpdateRascunho(Request $request, Nfe $nfe = null)
+    {
+        // Validação dos dados (combine a validação aqui)
+        // ...
+
+        DB::beginTransaction();
+        try {
+            $data = $request->except(['_token', '_method', 'action', 'produtos']);
+            $data['empresa_id'] = Auth::user()->empresa_id;
+            $data['status'] = 'rascunho';
+            
+            // Se for um novo rascunho, cria. Se não, atualiza.
+            $rascunho = Nfe::updateOrCreate(['id' => $nfe->id ?? null], $data);
+
+            // Deleta os itens antigos para reinserir os novos
+            $rascunho->items()->delete();
+
+            // Insere os novos itens
+            foreach ($request->produtos as $index => $produtoData) {
+                NfeItem::create([
+                    'nfe_id' => $rascunho->id,
+                    'produto_id' => $produtoData['id'],
+                    'numero_item' => $index + 1,
+                    'quantidade' => $produtoData['quantidade'],
+                    'valor_unitario' => $produtoData['preco'],
+                    'valor_total' => $produtoData['quantidade'] * $produtoData['preco'],
+                ]);
+            }
+
+            DB::commit();
+
+            // Verifica a ação do botão
+            if ($request->input('action') === 'issue_now') {
+                // Se o usuário clicou em "Emitir", chama o método de emissão
+                return $this->emitirRascunho($rascunho, app(NFeService::class));
+            }
+
+            // Se clicou em "Salvar Rascunho", redireciona para a edição
+            return redirect()->route('nfe.rascunho.edit', $rascunho)->with('success', 'Rascunho salvo com sucesso!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Erro ao salvar rascunho: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    public function emitirRascunho(Nfe $nfe, NFeService $nfeService)
+    {
+        // Lógica de autorização
+        // ...
+        
+        // Constrói um objeto "Venda" virtual a partir do Rascunho salvo
+        $vendaVirtual = new Venda();
+        $vendaVirtual->setRelation('empresa', $nfe->empresa);
+        $vendaVirtual->setRelation('cliente', $nfe->cliente); // Assumindo que você adicionará a relação no Model Nfe
+        $vendaVirtual->total = $nfe->items->sum('valor_total');
+        
+        // Converte NfeItem para VendaItem virtualmente
+        $vendaItems = new Collection();
+        foreach($nfe->items as $nfeItem) {
+            $item = new VendaItem($nfeItem->toArray());
+            $item->setRelation('produto', $nfeItem->produto);
+            $vendaItems->push($item);
+        }
+        $vendaVirtual->setRelation('items', $vendaItems);
+
+        // ... (lógica para pagamentos e transporte) ...
+
+        // Passa o ID do rascunho para o service poder atualizá-lo
+        $resultado = $nfeService->emitir($vendaVirtual, null, $nfe->id);
+
+        if ($resultado['success']) {
+            return redirect()->route('nfe.index')->with('success', $resultado['message']);
+        } else {
+            // Se falhar, redireciona de volta para a edição do rascunho
+            return redirect()->route('nfe.rascunho.edit', $nfe)->with('error', $resultado['message']);
+        }
+    }
+
+
+    public function editRascunho(Nfe $nfe)
+    {
+        // Lógica de autorização
+        if ($nfe->empresa_id !== Auth::user()->empresa_id || $nfe->status !== 'rascunho') {
+            abort(403);
+        }
+        
+        // Carrega os mesmos dados da view de criação
+        $clientes = Cliente::where('empresa_id', $nfe->empresa_id)->get();
+        $produtos = Produto::where('empresa_id', $nfe->empresa_id)->get();
+
+        return view('nfe.criar-avulsa', compact('nfe', 'clientes', 'produtos'));
+    }
+
 
 
     public function downloadDanfe(Nfe $nfe)
