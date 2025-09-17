@@ -25,6 +25,11 @@ class Venda extends Model
         'status',
         'observacoes',
         'nfe_chave_acesso',
+        'transportadora_id',
+        'frete_modalidade',
+        'frete_valor',
+        'peso_bruto',
+        'peso_liquido',
     ];
 
     // --- RELACIONAMENTOS ---

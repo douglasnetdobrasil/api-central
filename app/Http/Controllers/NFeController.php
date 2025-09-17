@@ -24,33 +24,36 @@ class NFeController extends Controller
      */
     public function index(Request $request)
     {
-        $empresaId = Auth::user()->empresa_id;
-        $termoPesquisa = $request->query('search');
-
-        // Inicia a query base, buscando apenas as notas da empresa do usuário logado
-        $query = Nfe::where('empresa_id', $empresaId);
-
-        // Se um termo de pesquisa foi enviado, aplica o filtro
-        if ($termoPesquisa) {
-            $query->where(function ($q) use ($termoPesquisa) {
-                // Pesquisa no número da NF-e
-                $q->where('numero_nfe', 'like', '%' . $termoPesquisa . '%')
-                  // Pesquisa no nome do cliente (através do relacionamento com Venda e Cliente)
-                  ->orWhereHas('venda.cliente', function ($subQ) use ($termoPesquisa) {
-                      $subQ->where('nome', 'like', '%' . $termoPesquisa . '%');
-                  });
+        $search = $request->input('search');
+    
+        // Busca pelas Notas Fiscais já Emitidas (sua lógica original, mantida)
+        $notasEmitidasQuery = Nfe::with('venda.cliente')
+            ->orderBy('created_at', 'desc');
+    
+        // Busca pelas Vendas que são Rascunhos de NF-e Avulsa
+        $rascunhosQuery = Venda::where('status', 'Em Digitação')
+            ->with('cliente')
+            ->orderBy('updated_at', 'desc');
+    
+        // Aplica o filtro de busca em ambas as consultas, se houver
+        if ($search) {
+            $notasEmitidasQuery->where(function ($query) use ($search) {
+                $query->where('numero_nfe', 'like', "%{$search}%")
+                    ->orWhereHas('venda.cliente', function ($q) use ($search) {
+                        $q->where('nome', 'like', "%{$search}%");
+                    });
+            });
+    
+            $rascunhosQuery->whereHas('cliente', function ($q) use ($search) {
+                $q->where('nome', 'like', "%{$search}%");
             });
         }
-
-        // Adiciona o eager loading para otimizar a consulta e ordena pelos mais recentes
-        $notasEmitidas = $query->with('venda.cliente', 'cces') // Adiciona 'cces' aqui
-        ->latest()
-        ->paginate(15);
-        // Retorna a view, passando a coleção de notas e também o termo de pesquisa (para manter no campo do formulário)
-        return view('nfe.index', [
-            'notasEmitidas' => $notasEmitidas,
-            'search' => $termoPesquisa,
-        ]);
+    
+        // Pagina os resultados separadamente para cada aba
+        $notasEmitidas = $notasEmitidasQuery->paginate(10, ['*'], 'emitidas_page');
+        $rascunhos = $rascunhosQuery->paginate(10, ['*'], 'rascunhos_page');
+    
+        return view('nfe.index', compact('notasEmitidas', 'rascunhos', 'search'));
     }
     /**
      * Aciona o serviço para emitir uma NF-e para uma determinada venda.

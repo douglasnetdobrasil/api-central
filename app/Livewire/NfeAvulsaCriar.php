@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Exception;
 
-class NfeAvulsaCreate extends Component
+class NfeAvulsaCriar extends Component
 {
     // --- PROPRIEDADES DA NF-e ---
     public string $clienteSearch = '', $produtoSearch = '', $transportadoraSearch = '';
@@ -48,18 +48,12 @@ class NfeAvulsaCreate extends Component
     public float $troco = 0;
     public float $faltaPagar = 0;
 
-    public function mount(?Venda $venda = null)
+    public function mount()
     {
         $this->formasPagamentoOpcoes = FormaPagamento::where('ativo', true)->orderBy('nome')->get();
         $this->formaPagamentoSelecionada = $this->formasPagamentoOpcoes->first()->id ?? null;
         $this->natureza_operacao_id = NaturezaOperacao::first()->id ?? null;
-        
-        if ($venda && $venda->exists) {
-            $this->venda = $venda;
-            $this->carregarRascunho();
-        } else {
-            $this->calcularTotais();
-        }
+        $this->calcularTotais();
     }
     
     public function carregarRascunho()

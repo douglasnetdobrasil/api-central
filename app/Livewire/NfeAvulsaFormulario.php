@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Exception;
 
-class NfeAvulsaCreate extends Component
+class NfeAvulsaFormulario extends Component
 {
     // --- PROPRIEDADES DA NF-e ---
     public string $clienteSearch = '', $produtoSearch = '', $transportadoraSearch = '';

@@ -11,9 +11,10 @@ use NFePHP\NFe\Tools;
 use NFePHP\NFe\Common\Standardize;
 use App\Models\Empresa;
 use NFePHP\NFe\Complements;
+use NFePHP\DA\Common\DaEvento;
 use App\Models\Nfe;
+use NFePHP\DA\Cce;
 use NFePHP\NFe\Events;
-use NFePHP\DA\Common\CCe;
 use NFePHP\NFe\Evento;
 use App\Models\Venda;
 use Illuminate\Support\Facades\DB;
@@ -92,6 +93,40 @@ class NFeService
         $vendaConsolidada->total = $vendas->sum('total');
         return $this->emitir($vendaConsolidada, $vendaIds);
     }
+
+    private function tratarRespostaSefaz(\stdClass $std): array
+{
+    // Pega o código e o motivo da resposta padronizada
+    $codigo = $std->cStat ?? null;
+    $motivo = $std->xMotivo ?? 'Motivo não especificado.';
+
+    // Lista de códigos que consideramos SUCESSO
+    $codigosSucesso = [
+        '100', // Autorizado o uso da NF-e
+        '150', // Autorizado o uso da NF-e, autorização fora de prazo
+        '135', // Evento registrado e vinculado a NF-e (Sucesso para Cancelamento, CC-e, etc)
+        '128', // Lote de Evento Processado (Sucesso para Cancelamento, CC-e, etc)
+    ];
+
+    // Lista de códigos que indicam que o lote ainda está sendo processado
+    $codigosEmProcessamento = [
+        '103', // Lote recebido com sucesso
+        '105', // Lote em processamento
+    ];
+
+    // Verifica se o código é de sucesso
+    if (in_array($codigo, $codigosSucesso)) {
+        return ['status' => 'sucesso', 'mensagem' => $motivo];
+    }
+
+    // Verifica se o código é de processamento (para consultas futuras)
+    if (in_array($codigo, $codigosEmProcessamento)) {
+        return ['status' => 'processando', 'mensagem' => "[{$codigo}] {$motivo}"];
+    }
+
+    // Se não for nenhum dos acima, consideramos como erro
+    return ['status' => 'erro', 'mensagem' => "[{$codigo}] {$motivo}"];
+}
     
     public function emitir(Venda $venda, array $vendaIdsOriginais = null)
     {
@@ -101,65 +136,78 @@ class NFeService
             if (is_null($vendaIdsOriginais)) $vendaIdsOriginais = [$venda->id];
             
             $this->bootstrap($empresa);
-
+    
             $serie = 1;
             $numero = $this->getNextNFeNumber($empresa, $serie);
-
+    
             $nfeRecord = Nfe::create([
                 'empresa_id' => $empresa->id, 'venda_id' => $vendaIdsOriginais[0],
                 'status' => 'processando', 'ambiente' => $this->configArray['tpAmb'],
                 'serie' => $serie, 'numero_nfe' => $numero,
             ]);
-
+    
             $this->buildHeader($empresa, $venda, $numero, $serie);
             $this->buildEmitter($empresa);
             $this->buildRecipient($venda);
             $this->buildProducts($venda);
             $this->buildTotals();
-            $this->buildTransport();
+            $this->buildTransport($venda);
             $this->buildPayments($venda);
-
+    
+            // A validação ocorre aqui, dentro do getXML()
             $xml = $this->nfe->getXML();
+    
+            // Verificação extra, embora o getXML() já possa lançar uma exceção
             $errors = $this->nfe->getErrors();
             if (count($errors) > 0) {
                 throw new \Exception("Erros de validação do XML:\n- " . implode("\n- ", $errors));
             }
-
+    
             $chave = $this->nfe->getChave();
             $xmlAssinado = $this->tools->signNFe($xml);
-            // 1. FORÇA O ENVIO SÍNCRONO: Adiciona o parâmetro '1' ao final da chamada.
-            // Isso é obrigatório para lotes com apenas uma NF-e.
+            
             $protocolo = $this->tools->sefazEnviaLote([$xmlAssinado], $nfeRecord->id, 1);
             
-            // 2. TRATA A RESPOSTA DIRETA: A variável $protocolo já contém o XML com o resultado
-            // final do processamento. A consulta de recibo não é mais necessária.
             $stProt = new Standardize($protocolo);
             $stdProt = $stProt->toStd();
             
-            // Tenta obter o status de dentro da tag <protNFe>. Se não existir, usa o status geral.
             $cStat = $stdProt->protNFe->infProt->cStat ?? $stdProt->cStat ?? null;
             $xMotivo = $stdProt->protNFe->infProt->xMotivo ?? $stdProt->xMotivo ?? 'Motivo da rejeição não especificado.';
             
-            // Status '100' (Autorizado) ou '150' (Autorizado fora de prazo) indicam sucesso.
             if (in_array($cStat, ['100', '150'])) {
-                // A nota foi autorizada com sucesso.
-                // O método handleSuccess espera o XML do protocolo como primeiro parâmetro.
                 $this->handleSuccess($protocolo, $xmlAssinado, $nfeRecord, $chave);
                 Venda::whereIn('id', $vendaIdsOriginais)->update(['nfe_chave_acesso' => $chave]);
                 DB::commit();
                 return ['success' => true, 'message' => "NF-e #{$nfeRecord->numero_nfe} autorizada!", 'chave' => $chave];
             } else {
-                // A nota foi processada, mas rejeitada pela SEFAZ.
                 throw new \Exception("SEFAZ Rejeitou a Nota: [{$cStat}] {$xMotivo}");
             }
-
+    
+        // ======================= INÍCIO DA MUDANÇA PRINCIPAL =======================
         } catch (\Exception $e) {
             DB::rollBack();
-            if (isset($nfeRecord)) {
-                $nfeRecord->update(['status' => 'erro', 'mensagem_erro' => $e->getMessage()]);
+    
+            // Tenta obter os erros detalhados do objeto NFe, se ele existir
+            $detailedErrors = $this->nfe->getErrors() ?? [];
+            $finalMessage = '';
+    
+            if (!empty($detailedErrors)) {
+                // Se encontrarmos erros detalhados, formatamos uma mensagem clara para o usuário
+                $errorList = implode("\n- ", $detailedErrors);
+                $finalMessage = "Foram encontrados os seguintes erros de validação na NF-e:\n\n- " . $errorList;
+            } else {
+                // Se não houver erros detalhados, usamos a mensagem da exceção original (pode ser um erro de certificado, conexão, etc.)
+                $finalMessage = "Erro ao emitir NF-e: " . $e->getMessage();
             }
-            return ['success' => false, 'message' => "Erro ao emitir NF-e: " . $e->getMessage()];
+    
+            if (isset($nfeRecord)) {
+                $nfeRecord->update(['status' => 'erro', 'mensagem_erro' => $finalMessage]);
+            }
+    
+            // Retorna a mensagem final, que agora é muito mais clara
+            return ['success' => false, 'message' => $finalMessage];
         }
+        // ======================= FIM DA MUDANÇA PRINCIPAL =======================
     }
 
     public function cartaCorrecao(Nfe $nfe, string $correcao): array
@@ -205,7 +253,6 @@ class NFeService
     {
         try {
             $chave = $nfe->chave_acesso;
-            // A sequência é o valor ATUAL no banco, pois o increment já foi feito.
             $sequencia = $nfe->cce_sequencia_evento;
             $anoMes = date('Y-m');
     
@@ -213,13 +260,24 @@ class NFeService
             Storage::disk('private')->put($pathXmlCce, $responseXml);
     
             $xmlAutorizado = Storage::disk('private')->get($nfe->caminho_xml);
-            $dacce = new CCe($xmlAutorizado, $responseXml);
-            $pdf = $dacce->render();
+    
+            // ======================= CÓDIGO PARA A VERSÃO ATUALIZADA =======================
+    
+            // 1. Instancia o Danfe com o XML da NFe principal
+            $danfe = new Danfe($xmlAutorizado);
+    
+            // 2. ADICIONA o XML do evento (a resposta da SEFAZ) ao objeto Danfe
+            $danfe->addEvento($responseXml);
+    
+            // 3. Renderiza o PDF, que agora será o do evento (DACCE)
+            $pdf = $danfe->render();
+    
+            // =============================================================================
+    
             $pathPdfCce = "nfe/danfe/{$anoMes}/{$chave}-cce-{$sequencia}.pdf";
             Storage::disk('private')->put($pathPdfCce, $pdf);
     
-            // Salva os caminhos na nova tabela
-            Cce::create([
+            \App\Models\Cce::create([
                 'nfe_id' => $nfe->id,
                 'sequencia_evento' => $sequencia,
                 'caminho_xml' => $pathXmlCce,
@@ -227,10 +285,10 @@ class NFeService
             ]);
     
         } catch (\Exception $e) {
-            // ESTE É O TESTE FINAL: VAMOS PARAR E EXIBIR O ERRO EXATO DO BANCO DE DADOS
-            // O DB::rollBack() é importante para não deixar a transação aberta
-            DB::rollBack();
-            dd($e);
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            throw $e;
         }
     }
 
@@ -281,24 +339,36 @@ class NFeService
 
     private function buildHeader(Empresa $empresa, Venda $venda, int $numero, int $serie)
     {
-        $std = new stdClass();
-        $std->versao = '4.00';
-        $this->nfe->taginfNFe($std);
-        $std = new stdClass();
-        $std->cUF = $empresa->codigo_uf;
-        $std->cNF = rand(10000000, 99999999);
-        $std->natOp = 'VENDA DE MERCADORIAS';
-        $std->mod = 55;
-        $std->serie = $serie;
-        $std->nNF = $numero;
-        $std->dhEmi = date("Y-m-d\TH:i:sP");
-        $std->tpNF = 1;
-        $std->idDest = ($empresa->uf == $venda->cliente->estado) ? 1 : 2;
-        $std->cMunFG = $empresa->codigo_municipio;
-        $std->tpImp = 1; $std->tpEmis = 1; $std->tpAmb = $this->configArray['tpAmb'];
-        $std->finNFe = 1; $std->indFinal = 1; $std->indPres = 1;
-        $std->procEmi = 0; $std->verProc = 'Sistema ERP 1.0';
-        $this->nfe->tagide($std);
+        // 1. Cria a tag principal <infNFe> com a versão
+        $std_infNFe = new \stdClass();
+        $std_infNFe->versao = '4.00';
+        $this->nfe->taginfNFe($std_infNFe);
+    
+        // 2. Cria um NOVO objeto para a tag <ide> com todos os seus dados
+        $std_ide = new \stdClass();
+        $std_ide->cUF = $empresa->codigo_uf;
+        $std_ide->cNF = rand(10000000, 99999999);
+        
+        // Lendo os dados da Venda em vez de usar valores fixos
+        $std_ide->natOp = $venda->natureza_operacao->descricao ?? 'VENDA DE MERCADORIAS';
+        $std_ide->mod = 55;
+        $std_ide->serie = $serie;
+        $std_ide->nNF = $numero;
+        $std_ide->dhEmi = date("Y-m-d\TH:i:sP");
+        $std_ide->tpNF = $venda->tipo_operacao ?? 1;
+        $std_ide->idDest = ($empresa->uf == $venda->cliente->estado) ? 1 : 2;
+        $std_ide->cMunFG = $empresa->codigo_municipio;
+        $std_ide->tpImp = 1;
+        $std_ide->tpEmis = 1;
+        $std_ide->tpAmb = $this->configArray['tpAmb'];
+        $std_ide->finNFe = $venda->finalidade_emissao ?? 1;
+        $std_ide->indFinal = $venda->consumidor_final ?? 0;
+        $std_ide->indPres = 1;
+        $std_ide->procEmi = 0;
+        $std_ide->verProc = 'Sistema ERP 1.0';
+    
+        // 3. Adiciona a tag <ide> como filha da <infNFe> que já foi criada
+        $this->nfe->tagide($std_ide);
     }
     
     private function buildEmitter(Empresa $empresa)
@@ -363,104 +433,109 @@ class NFeService
             if (!$dadosFiscais) {
                 throw new \Exception("Dados fiscais não encontrados para o produto: {$produto->nome}");
             }
-            if (empty($dadosFiscais->pis_cst) || empty($dadosFiscais->cofins_cst)) {
-                throw new \Exception("Os códigos CST de PIS e COFINS são obrigatórios no cadastro fiscal do produto: {$produto->nome}");
+            
+            $pis_cst_bruto = $dadosFiscais->pis_cst;
+            $cofins_cst_bruto = $dadosFiscais->cofins_cst;
+    
+            if (empty(trim($pis_cst_bruto)) || empty(trim($cofins_cst_bruto))) {
+                throw new \Exception("Os códigos CST de PIS e COFINS são obrigatórios para o produto: {$produto->nome}");
             }
     
-            // --- Montagem do grupo <prod> (Sem alterações) ---
+            $pis_cst = str_pad(trim($pis_cst_bruto), 2, '0', STR_PAD_LEFT);
+            $cofins_cst = str_pad(trim($cofins_cst_bruto), 2, '0', STR_PAD_LEFT);
+            
+            // --- Montagem do grupo <prod> ---
             $std = new stdClass();
             $std->item = $i + 1;
-            $std->cProd = $produto->id; $std->cEAN = $produto->codigo_barras ?: 'SEM GTIN';
-            $std->xProd = $produto->nome; $std->NCM = $dadosFiscais->ncm;
-            $std->CFOP = $dadosFiscais->cfop; $std->uCom = $produto->unidade;
-            $std->qCom = $item->quantidade; $std->vUnCom = $item->preco_unitario;
-            $std->vProd = $item->subtotal_item; $std->cEANTrib = $produto->codigo_barras ?: 'SEM GTIN';
-            $std->uTrib = $produto->unidade; $std->qTrib = $item->quantidade;
-            $std->vUnTrib = $item->preco_unitario; $std->indTot = 1;
+            $std->cProd = $produto->id;
+            $std->cEAN = $produto->codigo_barras ?: 'SEM GTIN';
+            $std->xProd = $produto->nome;
+            $std->NCM = $dadosFiscais->ncm;
+            $std->CFOP = $dadosFiscais->cfop;
+            $std->uCom = $produto->unidade;
+            $std->qCom = $item->quantidade;
+            $std->vUnCom = $item->preco_unitario;
+            $std->vProd = $item->subtotal_item;
+            $std->cEANTrib = $produto->codigo_barras ?: 'SEM GTIN';
+            $std->uTrib = $produto->unidade;
+            $std->qTrib = $item->quantidade;
+            $std->vUnTrib = $item->preco_unitario;
+            $std->indTot = 1;
             $this->nfe->tagprod($std);
     
-            // --- Montagem do grupo <imposto> (Sem alterações) ---
+            // --- Montagem do grupo <imposto> ---
             $std = new stdClass();
             $std->item = $i + 1;
             $this->nfe->tagimposto($std);
     
-            // --- Montagem do ICMS (Sem alterações) ---
-            if ($empresa->crt == 1) { // Simples Nacional
+            // --- ICMS ---
+            if ($empresa->crt == 1) { 
                 $std = new stdClass();
-                $std->item = $i + 1; $std->orig = $dadosFiscais->origem;
+                $std->item = $i + 1;
+                $std->orig = $dadosFiscais->origem;
                 $std->CSOSN = $dadosFiscais->csosn;
                 $this->nfe->tagICMSSN($std);
-            } else { // Regime Normal
-                // ... sua lógica para regime normal ...
+            } else { 
+                $std = new stdClass();
+                $std->item = $i + 1;
+                $std->orig = $dadosFiscais->origem;
+                $std->CST = $dadosFiscais->icms_cst;
+    
+                switch ($std->CST) {
+                    case '00':
+                        $std->modBC = $dadosFiscais->icms_mod_bc;
+                        $std->vBC = $item->subtotal_item;
+                        $std->pICMS = $dadosFiscais->icms_aliquota;
+                        $std->vICMS = ($std->vBC * $std->pICMS) / 100;
+                        $this->nfe->tagICMS00($std);
+                        break;
+                    case '20':
+                        $std->modBC = $dadosFiscais->icms_mod_bc;
+                        $std->pRedBC = $dadosFiscais->icms_reducao_bc;
+                        $std->vBC = $item->subtotal_item * (1 - ($std->pRedBC / 100));
+                        $std->pICMS = $dadosFiscais->icms_aliquota;
+                        $std->vICMS = ($std->vBC * $std->pICMS) / 100;
+                        $this->nfe->tagICMS20($std);
+                        break;
+                    case '40': case '41': case '50':
+                        $this->nfe->tagICMS40($std);
+                        break;
+                    default:
+                        throw new \Exception("O CST de ICMS '{$std->CST}' para o produto '{$produto->nome}' não é tratado pelo sistema.");
+                }
             }
-            
-            // ======================= INÍCIO DA CORREÇÃO FINAL PIS/COFINS =======================
-            // A forma correta é passar os dados do "conteúdo" diretamente para o método da "caixa".
-            
-            // Para o PIS
+    
+            // --- PIS ---
             $std = new stdClass();
             $std->item = $i + 1;
-            $std->CST = $dadosFiscais->pis_cst; // A biblioteca usará este CST para criar o sub-bloco correto (PISNT)
-            $this->nfe->tagPIS($std); // Chamamos apenas o método principal
+            $std->CST = $pis_cst;
+            if ($empresa->crt != 1 && isset($dadosFiscais->pis_aliquota) && $dadosFiscais->pis_aliquota > 0) {
+                $std->vBC = $item->subtotal_item;
+                $std->pPIS = $dadosFiscais->pis_aliquota;
+                $std->vPIS = number_format(($std->vBC * $std->pPIS) / 100, 2, '.', '');
+            } else {
+                // WORKAROUND: Para operações não tributáveis, envia os valores zerados para forçar a criação do grupo correto.
+                $std->vBC = 0.00;
+                $std->pPIS = 0.00;
+                $std->vPIS = 0.00;
+            }
+            $this->nfe->tagPIS($std);
     
-            // Para o COFINS
+            // --- COFINS ---
             $std = new stdClass();
             $std->item = $i + 1;
-            $std->CST = $dadosFiscais->cofins_cst; // A biblioteca usará este CST para criar o sub-bloco correto (COFINSNT)
-            $this->nfe->tagCOFINS($std); // Chamamos apenas o método principal
-            // ======================= FIM DA CORREÇÃO FINAL PIS/COFINS =======================
-        }
-    }
-
-    public function cancelar(Nfe $nfe, string $justificativa): array
-    {
-        DB::beginTransaction();
-        try {
-            $this->bootstrap($nfe->empresa);
-    
-            if (empty($nfe->protocolo_autorizacao)) {
-                throw new \Exception('O número do protocolo de autorização não foi encontrado para esta NF-e.');
-            }
-    
-            $response = $this->tools->sefazCancela(
-                $nfe->chave_acesso,
-                $justificativa,
-                $nfe->protocolo_autorizacao
-            );
-    
-            $st = new Standardize($response);
-            $std = $st->toStd();
-    
-            // Cenário 1: Sucesso padrão (ex: 135 - Evento Vinculado)
-            if ($std->cStat == '135') {
-                $this->handleCancelSuccess($nfe, $justificativa, $response);
-                DB::commit();
-                return ['success' => true, 'message' => 'NF-e cancelada com sucesso!'];
+            $std->CST = $cofins_cst;
+            if ($empresa->crt != 1 && isset($dadosFiscais->cofins_aliquota) && $dadosFiscais->cofins_aliquota > 0) {
+                $std->vBC = $item->subtotal_item;
+                $std->pCOFINS = $dadosFiscais->cofins_aliquota;
+                $std->vCOFINS = number_format(($std->vBC * $std->pCOFINS) / 100, 2, '.', '');
             } else {
-                // Outras respostas da SEFAZ que não são exceções, mas também não são sucesso
-                throw new \Exception("[{$std->cStat}] {$std->xMotivo}");
+                // WORKAROUND: Para operações não tributáveis, envia os valores zerados para forçar a criação do grupo correto.
+                $std->vBC = 0.00;
+                $std->pCOFINS = 0.00;
+                $std->vCOFINS = 0.00;
             }
-    
-        } catch (\Exception $e) {
-            // ======================= AJUSTE FINAL =======================
-            // Cenário 2: Sucesso retornado como exceção (código 128)
-            if (str_contains($e->getMessage(), '[128] Lote de Evento Processado')) {
-                
-                // Se a exceção for o status 128, consideramos como SUCESSO.
-                // A única limitação é que não conseguimos o XML de resposta para anexar,
-                // mas o mais importante é atualizar o status local.
-                $nfe->update([
-                    'status' => 'cancelada',
-                    'justificativa_cancelamento' => $justificativa,
-                ]);
-                DB::commit();
-                return ['success' => true, 'message' => 'NF-e cancelada com sucesso (Status SEFAZ: 128)!'];
-    
-            } else {
-                // Cenário 3: Erro real (qualquer outra exceção)
-                DB::rollBack();
-                return ['success' => false, 'message' => $e->getMessage()];
-            }
+            $this->nfe->tagCOFINS($std);
         }
     }
     
@@ -483,13 +558,65 @@ class NFeService
         $this->nfe->tagICMSTot(new stdClass());
     }
 
-    private function buildTransport()
+    private function buildTransport(Venda $venda)
     {
         $std = new stdClass();
-        $std->modFrete = 9; // 9-Sem Frete
+        $std->modFrete = $venda->frete_modalidade ?? 9; // <-- CORRIGIDO
         $this->nfe->tagtransp($std);
+    
+        // Futuramente: se houver frete, você precisará adicionar os dados da transportadora e volumes aqui.
     }
 
+    public function cancelar(Nfe $nfe, string $justificativa): array
+    {
+        try {
+            $this->bootstrap($nfe->empresa);
+    
+            $chave = $nfe->chave_acesso;
+            $protocolo = $nfe->protocolo_autorizacao;
+            $sequenciaEvento = 1;
+            $dhEvento = new \DateTime("now");
+    
+            $response = $this->tools->sefazCancela(
+                $chave,
+                $justificativa,
+                $protocolo,
+                $dhEvento,
+                $sequenciaEvento
+            );
+    
+            // ====================== INÍCIO DA CORREÇÃO ======================
+    
+            // 1. Verificamos se houve uma resposta válida da SEFAZ
+            if (empty($response)) {
+                throw new \Exception("A SEFAZ não retornou uma resposta. Verifique a conexão, o certificado e o status do webservice.");
+            }
+    
+            $st = new \NFePHP\NFe\Common\Standardize($response);
+            $std = $st->toStd();
+    
+            // 2. A resposta do evento (cancelamento, cce) geralmente fica aninhada.
+            //    Procuramos pelo objeto 'infEvento' que contém o 'cStat' e 'xMotivo'.
+            $respostaEvento = $std->retEvento->infEvento ?? $std;
+            
+            // 3. Passamos o objeto correto (que contém o status) para o nosso tratador
+            $resultadoSefaz = $this->tratarRespostaSefaz($respostaEvento);
+            
+            // ======================= FIM DA CORREÇÃO ========================
+    
+            if ($resultadoSefaz['status'] === 'sucesso') {
+                $this->handleCancelSuccess($nfe, $justificativa, $response);
+                return ['success' => true, 'message' => 'NF-e cancelada com sucesso!'];
+            } else {
+                // A mensagem de erro agora vem diretamente do nosso tratador
+                throw new \Exception($resultadoSefaz['mensagem']);
+            }
+        } catch (\Exception $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    
     private function buildPayments(Venda $venda)
     {
         $this->nfe->tagpag(new stdClass());
