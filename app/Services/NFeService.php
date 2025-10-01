@@ -19,6 +19,7 @@ use NFePHP\NFe\Evento;
 use App\Models\Venda;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use App\Services\RegraTributariaService;
 use stdClass;
 
 class NFeService
@@ -426,32 +427,45 @@ class NFeService
     private function buildProducts(Venda $venda)
     {
         $empresa = $venda->empresa;
-        foreach ($venda->items as $i => $item) {
-            $produto = $item->produto;
-            $dadosFiscais = $produto->dadosFiscais;
+    $cliente = $venda->cliente;
+    $regraTributariaService = new RegraTributariaService();
+
+    foreach ($venda->items as $i => $item) {
+        $produto = $item->produto;
+
+        // ======================= INÍCIO DA CORREÇÃO =======================
+        $cfop = $item->cfop;
+
+        // Se o CFOP estiver vazio por qualquer motivo, lançamos um erro claro.
+        if (empty($cfop)) {
+            throw new \Exception("O produto '{$produto->nome}' está sem CFOP definido. Por favor, remova e adicione o item novamente na nota ou verifique o rascunho.");
+        }
+        // ======================= FIM DA CORREÇÃO ========================
+        
+        // 1. Encontra a regra aplicável para esta operação específica
+        $regra = $regraTributariaService->findRule($cfop, $empresa, $cliente);
+            // ======================= INÍCIO DA NOVA LÓGICA =======================
             
-            if (!$dadosFiscais) {
-                throw new \Exception("Dados fiscais não encontrados para o produto: {$produto->nome}");
+            // 1. Encontra a regra aplicável para esta operação específica
+            $regra = $regraTributariaService->findRule($cfop, $empresa, $cliente);
+    
+            if (!$regra) {
+                throw new \Exception("Nenhuma regra tributária encontrada para o produto '{$produto->nome}' (CFOP {$cfop}, Destino: {$cliente->estado}). Verifique as configurações em Admin > Regras Tributárias.");
             }
             
-            $pis_cst_bruto = $dadosFiscais->pis_cst;
-            $cofins_cst_bruto = $dadosFiscais->cofins_cst;
-    
-            if (empty(trim($pis_cst_bruto)) || empty(trim($cofins_cst_bruto))) {
-                throw new \Exception("Os códigos CST de PIS e COFINS são obrigatórios para o produto: {$produto->nome}");
-            }
-    
-            $pis_cst = str_pad(trim($pis_cst_bruto), 2, '0', STR_PAD_LEFT);
-            $cofins_cst = str_pad(trim($cofins_cst_bruto), 2, '0', STR_PAD_LEFT);
+            // 3. Aplica a regra e obtém todos os impostos calculados e padronizados
+            $impostos = $regraTributariaService->aplicarRegra($regra, $item);
             
-            // --- Montagem do grupo <prod> ---
+            // ======================= FIM DA NOVA LÓGICA =======================
+    
+            // --- Montagem do grupo <prod> (continua igual, mas usando o CFOP do item) ---
             $std = new stdClass();
             $std->item = $i + 1;
             $std->cProd = $produto->id;
             $std->cEAN = $produto->codigo_barras ?: 'SEM GTIN';
             $std->xProd = $produto->nome;
-            $std->NCM = $dadosFiscais->ncm;
-            $std->CFOP = $dadosFiscais->cfop;
+            $std->NCM = $produto->dadosFiscais->ncm;
+            $std->CFOP = $cfop; // Usa o CFOP que buscou a regra
             $std->uCom = $produto->unidade;
             $std->qCom = $item->quantidade;
             $std->vUnCom = $item->preco_unitario;
@@ -468,74 +482,39 @@ class NFeService
             $std->item = $i + 1;
             $this->nfe->tagimposto($std);
     
-            // --- ICMS ---
-            if ($empresa->crt == 1) { 
-                $std = new stdClass();
-                $std->item = $i + 1;
-                $std->orig = $dadosFiscais->origem;
-                $std->CSOSN = $dadosFiscais->csosn;
-                $this->nfe->tagICMSSN($std);
-            } else { 
-                $std = new stdClass();
-                $std->item = $i + 1;
-                $std->orig = $dadosFiscais->origem;
-                $std->CST = $dadosFiscais->icms_cst;
-    
-                switch ($std->CST) {
-                    case '00':
-                        $std->modBC = $dadosFiscais->icms_mod_bc;
-                        $std->vBC = $item->subtotal_item;
-                        $std->pICMS = $dadosFiscais->icms_aliquota;
-                        $std->vICMS = ($std->vBC * $std->pICMS) / 100;
-                        $this->nfe->tagICMS00($std);
-                        break;
-                    case '20':
-                        $std->modBC = $dadosFiscais->icms_mod_bc;
-                        $std->pRedBC = $dadosFiscais->icms_reducao_bc;
-                        $std->vBC = $item->subtotal_item * (1 - ($std->pRedBC / 100));
-                        $std->pICMS = $dadosFiscais->icms_aliquota;
-                        $std->vICMS = ($std->vBC * $std->pICMS) / 100;
-                        $this->nfe->tagICMS20($std);
-                        break;
-                    case '40': case '41': case '50':
-                        $this->nfe->tagICMS40($std);
-                        break;
-                    default:
-                        throw new \Exception("O CST de ICMS '{$std->CST}' para o produto '{$produto->nome}' não é tratado pelo sistema.");
+            // --- ICMS (Lógica agora muito mais limpa) ---
+            $std_icms = $impostos->ICMS;
+            $std_icms->item = $i + 1;
+            if ($empresa->crt == 1) { // Simples Nacional
+                $this->nfe->tagICMSSN($std_icms);
+            } else { // Regime Normal
+                if (empty($std_icms->CST)) {
+                    throw new \Exception("A regra tributária para '{$produto->nome}' não definiu um CST de ICMS para Regime Normal.");
+                }
+                $metodoIcms = 'tagICMS' . $std_icms->CST;
+                if (method_exists($this->nfe, $metodoIcms)) {
+                    $this->nfe->{$metodoIcms}($std_icms);
+                } else {
+                    $this->nfe->tagICMS40($std_icms); // Fallback para Isento/Não tributado
                 }
             }
     
             // --- PIS ---
-            $std = new stdClass();
-            $std->item = $i + 1;
-            $std->CST = $pis_cst;
-            if ($empresa->crt != 1 && isset($dadosFiscais->pis_aliquota) && $dadosFiscais->pis_aliquota > 0) {
-                $std->vBC = $item->subtotal_item;
-                $std->pPIS = $dadosFiscais->pis_aliquota;
-                $std->vPIS = number_format(($std->vBC * $std->pPIS) / 100, 2, '.', '');
-            } else {
-                // WORKAROUND: Para operações não tributáveis, envia os valores zerados para forçar a criação do grupo correto.
-                $std->vBC = 0.00;
-                $std->pPIS = 0.00;
-                $std->vPIS = 0.00;
-            }
-            $this->nfe->tagPIS($std);
+            $std_pis = $impostos->PIS;
+            $std_pis->item = $i + 1;
+            $this->nfe->tagPIS($std_pis);
     
             // --- COFINS ---
-            $std = new stdClass();
-            $std->item = $i + 1;
-            $std->CST = $cofins_cst;
-            if ($empresa->crt != 1 && isset($dadosFiscais->cofins_aliquota) && $dadosFiscais->cofins_aliquota > 0) {
-                $std->vBC = $item->subtotal_item;
-                $std->pCOFINS = $dadosFiscais->cofins_aliquota;
-                $std->vCOFINS = number_format(($std->vBC * $std->pCOFINS) / 100, 2, '.', '');
-            } else {
-                // WORKAROUND: Para operações não tributáveis, envia os valores zerados para forçar a criação do grupo correto.
-                $std->vBC = 0.00;
-                $std->pCOFINS = 0.00;
-                $std->vCOFINS = 0.00;
+            $std_cofins = $impostos->COFINS;
+            $std_cofins->item = $i + 1;
+            $this->nfe->tagCOFINS($std_cofins);
+    
+            // --- IPI (se aplicável) ---
+            if (isset($impostos->IPI->CST) && !empty($impostos->IPI->CST)) {
+                $std_ipi = $impostos->IPI;
+                $std_ipi->item = $i + 1;
+                $this->nfe->tagIPI($std_ipi);
             }
-            $this->nfe->tagCOFINS($std);
         }
     }
     

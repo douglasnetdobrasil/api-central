@@ -60,6 +60,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('perfis', RoleController::class)->except(['show']);
         Route::resource('usuarios', UserController::class);
         Route::resource('empresa', EmpresaController::class)->except(['show']);
+       
     });
 
      // Rota para a busca de clientes via API para o Select2 (Original - MANTIDO)
@@ -74,7 +75,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/pedidos/importar-orcamento', [PedidoController::class, 'importarOrcamento'])->name('pedidos.importarOrcamento');
     Route::get('/pedidos/{venda}/edit', [PedidoController::class, 'edit'])->name('pedidos.edit');
     Route::post('/pedidos/{venda}/emitir-nfe', [NFeController::class, 'emitir'])->name('pedidos.emitirNFe');
-
+    Route::resource('contas_a_pagar', App\Http\Controllers\ContaAPagarController::class); 
     // NFe (Original - MANTIDO)
     Route::prefix('nfe')->name('nfe.')->group(function () {
         Route::get('/', [NFeController::class, 'index'])->name('index');
@@ -124,6 +125,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('perfis-fiscais', PerfilFiscalController::class);
         Route::get('configuracoes', [ConfiguracaoController::class, 'index'])->name('configuracoes.index');
         Route::post('configuracoes', [ConfiguracaoController::class, 'update'])->name('configuracoes.update');
+        Route::resource('regras-tributarias', App\Http\Controllers\RegraTributariaController::class);
     });
 
     // Rota de teste (Original - MANTIDO)

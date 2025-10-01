@@ -164,7 +164,55 @@ class NfeAvulsaCriar extends Component
     private function recalcularValoresPagamento() { $this->valorRecebido = collect($this->pagamentos)->sum('valor'); $this->faltaPagar = $this->totalNota - $this->valorRecebido; $this->troco = 0; if ($this->faltaPagar < 0) { $this->troco = abs($this->faltaPagar); $this->faltaPagar = 0; } $this->valorPagamentoAtual = number_format($this->faltaPagar > 0 ? $this->faltaPagar : 0, 2, '.', ''); }
 
     // --- SEUS MÉTODOS ORIGINAIS (MANTIDOS 100% FIÉIS) ---
-    public function calcularTotais(){ $subtotal = 0; $totalQuantidade = 0; $pesoBruto = 0; $pesoLiquido = 0; $totalBCIcms = 0; $totalValorIcms = 0; $totalValorIpi = 0; foreach ($this->cart as $index => &$item) { $item['total_item'] = $item['preco'] * $item['quantidade']; $subtotal += $item['total_item']; $totalQuantidade += $item['quantidade']; $pesoBruto += (float)($item['peso_bruto'] ?? 0) * $item['quantidade']; $pesoLiquido += (float)($item['peso_liquido'] ?? 0) * $item['quantidade']; $totalBCIcms += (float)($item['impostos']['icms_base_calculo'] ?? 0); $totalValorIcms += (float)($item['impostos']['icms_valor'] ?? 0); $totalValorIpi += (float)($item['impostos']['ipi_valor'] ?? 0); } $this->subtotal = $subtotal; $this->totalQuantidadeProdutos = $totalQuantidade; $this->peso_bruto = $pesoBruto; $this->peso_liquido = $pesoLiquido; $this->total_base_calculo_icms = $totalBCIcms; $this->total_valor_icms = $totalValorIcms; $this->total_valor_ipi = $totalValorIpi; $this->totalNota = ($this->subtotal - $this->desconto) + (float)$this->frete_valor; $this->recalcularValoresPagamento(); /* >>> ALTERAÇÃO APLICADA AQUI <<< */ }
+    public function calcularTotais()
+{
+    // Inicializa as variáveis monetárias como strings para precisão
+    $subtotal = '0.00';
+    $totalBCIcms = '0.00';
+    $totalValorIcms = '0.00';
+    $totalValorIpi = '0.00';
+    
+    // Variáveis não monetárias podem continuar como estão
+    $totalQuantidade = 0;
+    $pesoBruto = 0;
+    $pesoLiquido = 0;
+
+    foreach ($this->cart as $index => &$item) {
+        // Usa bcmul para multiplicação precisa (preço * quantidade)
+        // Usamos 4 casas de precisão para o cálculo intermediário
+        $item['total_item'] = bcmul((string)$item['preco'], (string)$item['quantidade'], 4);
+        
+        // Usa bcadd para somar o subtotal de forma precisa
+        $subtotal = bcadd($subtotal, $item['total_item'], 4);
+        
+        // Cálculos não monetários continuam iguais
+        $totalQuantidade += $item['quantidade'];
+        $pesoBruto += (float)($item['peso_bruto'] ?? 0) * $item['quantidade'];
+        $pesoLiquido += (float)($item['peso_liquido'] ?? 0) * $item['quantidade'];
+        
+        // Usa bcadd para somar os totais de impostos de forma precisa
+        $totalBCIcms = bcadd($totalBCIcms, (string)($item['impostos']['icms_base_calculo'] ?? '0.00'), 2);
+        $totalValorIcms = bcadd($totalValorIcms, (string)($item['impostos']['icms_valor'] ?? '0.00'), 2);
+        $totalValorIpi = bcadd($totalValorIpi, (string)($item['impostos']['ipi_valor'] ?? '0.00'), 2);
+    }
+
+    // Arredonda o subtotal final para 2 casas decimais antes de atribuir
+    $this->subtotal = number_format((float)$subtotal, 2, '.', '');
+    
+    $this->totalQuantidadeProdutos = $totalQuantidade;
+    $this->peso_bruto = $pesoBruto;
+    $this->peso_liquido = $pesoLiquido;
+    $this->total_base_calculo_icms = (float)$totalBCIcms;
+    $this->total_valor_icms = (float)$totalValorIcms;
+    $this->total_valor_ipi = (float)$totalValorIpi;
+
+    // Usa bcsub e bcadd para o cálculo final do total da nota
+    $subtotalMenosDesconto = bcsub((string)$this->subtotal, (string)$this->desconto, 2);
+    $this->totalNota = bcadd($subtotalMenosDesconto, (string)$this->frete_valor, 2);
+    
+    // Chama o método que recalcula os pagamentos (que já corrigimos anteriormente)
+    $this->recalcularValoresPagamento();
+}
     public function selecionarClienteComEnter() { if (isset($this->clientesEncontrados[$this->highlightClienteIndex])) { $this->selecionarCliente($this->clientesEncontrados[$this->highlightClienteIndex]->id); } }
     public function selecionarProdutoComEnter() { if (isset($this->produtosEncontrados[$this->highlightProdutoIndex])) { $this->adicionarProduto($this->produtosEncontrados[$this->highlightProdutoIndex]->id); } }
     public function updatedClienteSearch($value){ $this->highlightClienteIndex = -1; if (strlen($value) >= 1) { $this->clientesEncontrados = Cliente::where('id', $value)->orWhere('nome', 'like', '%' . $value . '%')->orWhere('cpf_cnpj', 'like', '%' . $value . '%')->limit(5)->get(); } else { $this->clientesEncontrados = []; } }
@@ -174,7 +222,61 @@ class NfeAvulsaCriar extends Component
     public function updatedTransportadoraSearch($value){ if (strlen($value) >= 1) { $this->transportadorasEncontradas = Transportadora::where('empresa_id', Auth::user()->empresa_id)->where('ativo', true)->where(function ($query) use ($value) { $query->where('id', $value)->orWhere('razao_social', 'like', '%' . $value . '%')->orWhere('cnpj', 'like', '%' . $value . '%'); })->limit(5)->get(); } else { $this->transportadorasEncontradas = []; } }
     public function selecionarTransportadora($id) { $this->transportadoraSelecionada = Transportadora::find($id); $this->transportadoraSearch = ''; $this->transportadorasEncontradas = []; }
     public function removerTransportadora() { $this->transportadoraSelecionada = null; }
-    public function adicionarProduto($produtoId){ $produto = Produto::find($produtoId); if (!$produto) return; $cartIndex = collect($this->cart)->search(fn ($item) => $item['id'] === $produto->id); if ($cartIndex !== false) { $this->aumentarQuantidade($cartIndex); } else { $this->cart[] = [ 'id' => $produto->id, 'nome' => $produto->nome, 'preco' => $produto->preco_venda, 'quantidade' => 1, 'unidade' => $produto->unidade, 'cfop' => $produto->dadosFiscais->cfop ?? '5102', 'peso_bruto' => $produto->peso_bruto ?? 0, 'peso_liquido' => $produto->peso_liquido ?? 0, 'impostos' => [] ]; } $this->produtoSearch = ''; $this->produtosEncontrados = []; $this->calcularTotais(); }
+   
+   
+   
+    public function adicionarProduto($produtoId)
+    {
+        $produto = Produto::find($produtoId);
+        if (!$produto) return;
+    
+        // ======================= INÍCIO DA NOVA LÓGICA DE CFOP =======================
+        $cfopFinal = null;
+    
+        // 1. Tenta pegar o CFOP da Natureza da Operação selecionada na tela
+        if ($this->natureza_operacao_id) {
+            $natureza = NaturezaOperacao::find($this->natureza_operacao_id);
+            if ($natureza && !empty($natureza->cfop)) {
+                $cfopFinal = $natureza->cfop;
+            }
+        }
+    
+        // 2. Se não encontrou na Natureza, tenta pegar o CFOP padrão do PRODUTO
+        if (empty($cfopFinal) && isset($produto->dadosFiscais) && !empty($produto->dadosFiscais->cfop)) {
+            $cfopFinal = $produto->dadosFiscais->cfop;
+        }
+    
+        // 3. Se ainda assim não encontrou, usa um valor padrão de segurança
+        if (empty($cfopFinal)) {
+            $cfopFinal = '5102';
+        }
+        // ======================= FIM DA NOVA LÓGICA DE CFOP =======================
+    
+        $cartIndex = collect($this->cart)->search(fn ($item) => $item['id'] === $produto->id);
+        
+        if ($cartIndex !== false) {
+            $this->aumentarQuantidade($cartIndex);
+        } else {
+            $this->cart[] = [
+                'id' => $produto->id,
+                'nome' => $produto->nome,
+                'preco' => $produto->preco_venda,
+                'quantidade' => 1,
+                'unidade' => $produto->unidade,
+                'cfop' => $cfopFinal, // <-- AQUI USAMOS O CFOP ENCONTRADO
+                'peso_bruto' => $produto->peso_bruto ?? 0,
+                'peso_liquido' => $produto->peso_liquido ?? 0,
+                'impostos' => []
+            ];
+        }
+        
+        $this->produtoSearch = '';
+        $this->produtosEncontrados = [];
+        $this->calcularTotais();
+    }
+
+
+    
     public function removerProduto($cartIndex) { unset($this->cart[$cartIndex]); $this->cart = array_values($this->cart); $this->calcularTotais(); }
     public function aumentarQuantidade($cartIndex) { $this->cart[$cartIndex]['quantidade']++; $this->calcularTotais(); }
     public function diminuirQuantidade($cartIndex) { if ($this->cart[$cartIndex]['quantidade'] > 1) { $this->cart[$cartIndex]['quantidade']--; $this->calcularTotais(); } }

@@ -200,7 +200,7 @@
                     </x-dropdown-link>
                 @endcan
                 @can('ver-contas-pagar')
-                    <x-dropdown-link :href="route('fornecedores.index')">
+                    <x-dropdown-link :href="route('contas_a_pagar.index')">
                         {{ __('Contas a Pagar') }}
                     </x-dropdown-link>
                 @endcan
@@ -375,6 +375,11 @@
                 @can('ver-logs-sistema')
                     <x-dropdown-link :href="route('clientes.index')">
                         {{ __('Logs do Sistema') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-config-fiscal')
+                    <x-dropdown-link :href="route('admin.regras-tributarias.index')">
+                        {{ __('Regras Tributarias') }}
                     </x-dropdown-link>
                 @endcan
             </x-slot>

@@ -19,6 +19,7 @@ class VendaItem extends Model
         'quantidade',
         'preco_unitario',
         'subtotal_item',
+        'cfop',
     ];
 
     /**

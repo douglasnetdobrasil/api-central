@@ -19,7 +19,6 @@ return new class extends Migration
             'produtos',
             'fornecedores',
             'configuracoes',
-            'contas_a_pagar',
             'contas_a_receber',
             'dados_fiscais_produto',
             'detalhes_item_mercado',
