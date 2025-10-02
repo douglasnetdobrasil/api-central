@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Configuracao;
 use App\Models\Scopes\EmpresaScope;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Produto extends Model
 {
@@ -111,6 +112,11 @@ class Produto extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new EmpresaScope);
+    }
+
+    public function movimentos(): HasMany
+    {
+        return $this->hasMany(EstoqueMovimento::class);
     }
 
     

@@ -1,6 +1,11 @@
 <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 dark:text-gray-100">
-                    {{-- Adicionar filtros aqui no futuro --}}
+                <button wire:click="$dispatch('abrirModalFiltros')" class="flex items-center space-x-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600" title="Filtros e Relatórios">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd" />
+                </svg>
+                <span>Filtros</span>
+            </button>
                     <div class="overflow-x-auto">
                     <table class="min-w-full divide-y dark:divide-gray-700">
     <thead>
@@ -68,4 +73,5 @@
                 </div>
                 @livewire('contas-a-pagar.pagar-modal')
                 @livewire('contas-a-pagar.historico-pagamentos-modal')
+                @livewire('contas-a-pagar.filtros-modal')
             </div>

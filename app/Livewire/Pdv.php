@@ -5,12 +5,14 @@ use App\Models\Cliente;
 use App\Models\Produto;
 use App\Models\Venda;
 use App\Models\FormaPagamento;
+use App\Services\GeradorContasReceberService; // << NOVO >>: Importa o nosso serviço
 use Livewire\Component;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log; // << NOVO >>: Para registrar erros
 
 class Pdv extends Component
 {
-    // --- SUAS PROPRIEDADES ORIGINAIS (MANTIDAS 100%) ---
+    // --- SUAS PROPRIEDADES ORIGINAIS ---
     public string $clienteSearch = '';
     public ?Cliente $clienteSelecionado = null;
     public $clientesEncontrados = [];
@@ -36,6 +38,8 @@ class Pdv extends Component
     public $formaPagamentoSelecionada = null;
     public $formasPagamentoOpcoes = [];
 
+    // --- SEUS MÉTODOS ORIGINAIS (AGORA COMPLETOS) ---
+
     public function mount()
     {
         $config = DB::table('configuracoes')->where('chave', 'baixar_estoque_pdv')->first();
@@ -45,8 +49,6 @@ class Pdv extends Component
         $this->formasPagamentoOpcoes = FormaPagamento::where('ativo', true)->orderBy('nome')->get();
         $this->formaPagamentoSelecionada = $this->formasPagamentoOpcoes->first()->id ?? null;
     }
-    
-    // --- TODOS OS SEUS MÉTODOS ORIGINAIS FORAM MANTIDOS INTEGRALMENTE ABAIXO ---
 
     public function selecionarClienteComEnter()
     {
@@ -242,58 +244,6 @@ class Pdv extends Component
         }
     }
 
-    public function confirmarVendaComPagamentos()
-    {
-        if ($this->faltaPagar > 0.009) {
-             session()->flash('error_modal', 'O valor recebido é menor que o total da venda.');
-             return;
-        }
-        DB::beginTransaction();
-        try {
-            $venda = Venda::create([
-                'empresa_id' => auth()->user()->empresa_id, 'user_id' => auth()->id(),
-                'cliente_id' => $this->clienteSelecionado?->id, 'subtotal' => $this->subtotal,
-                'desconto' => $this->descontoCalculado, 'total' => $this->total,
-                'observacoes' => $this->observacoes, 'status' => 'concluida',
-            ]);
-
-            foreach($this->pagamentos as $pagamento) {
-                $venda->pagamentos()->create([
-                    'empresa_id' => $venda->empresa_id,
-                    'forma_pagamento_id' => $pagamento['id'],
-                    'valor' => $pagamento['valor'],
-                ]);
-            }
-            
-            foreach ($this->cart as $item) {
-                $venda->items()->create([
-                    'produto_id' => $item['id'], 'descricao_produto' => $item['nome'],
-                    'quantidade' => $item['quantidade'], 'preco_unitario' => $item['preco'],
-                    'subtotal_item' => $item['total_item'],
-                ]);
-                $produto = Produto::find($item['id']);
-                if ($produto) {
-                    $saldoAnterior = $produto->estoque_atual;
-                    $produto->decrement('estoque_atual', $item['quantidade']);
-                    $saldoNovo = $produto->fresh()->estoque_atual;
-                    DB::table('estoque_movimentos')->insert([
-                        'empresa_id' => auth()->user()->empresa_id, 'produto_id' => $produto->id,
-                        'user_id' => auth()->id(), 'tipo_movimento' => 'saida_venda',
-                        'quantidade' => $item['quantidade'], 'saldo_anterior' => $saldoAnterior,
-                        'saldo_novo' => $saldoNovo, 'origem_id' => $venda->id,
-                        'origem_type' => Venda::class, 'created_at' => now(), 'updated_at' => now(),
-                    ]);
-                }
-            }
-            DB::commit();
-            session()->flash('success', 'Venda finalizada com sucesso!');
-            return redirect()->route('pedidos.index');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            session()->flash('error', 'ERRO AO FINALIZAR VENDA: ' . $e->getMessage());
-        }
-    }
-
     public function adicionarPagamento()
     {
         $valor = (float)str_replace(',', '.', $this->valorPagamentoAtual);
@@ -342,5 +292,77 @@ class Pdv extends Component
     public function render()
     {
         return view('livewire.pdv')->layout('layouts.app');
+    }
+
+    // =========================================================================
+    // |||||||||||||||||||||| MÉTODO ATUALIZADO |||||||||||||||||||||||||||||||||
+    // =========================================================================
+    public function confirmarVendaComPagamentos()
+    {
+        if ($this->faltaPagar > 0.009) {
+             session()->flash('error_modal', 'O valor recebido é menor que o total da venda.');
+             return;
+        }
+
+        $venda = null;
+
+        DB::beginTransaction();
+        try {
+            $venda = Venda::create([
+                'empresa_id' => auth()->user()->empresa_id, 'user_id' => auth()->id(),
+                'cliente_id' => $this->clienteSelecionado?->id, 'subtotal' => $this->subtotal,
+                'desconto' => $this->descontoCalculado, 'total' => $this->total,
+                'observacoes' => $this->observacoes, 'status' => 'concluida',
+            ]);
+
+            foreach($this->pagamentos as $pagamento) {
+                $venda->pagamentos()->create([
+                    'empresa_id' => $venda->empresa_id,
+                    'forma_pagamento_id' => $pagamento['id'],
+                    'valor' => $pagamento['valor'],
+                ]);
+            }
+            
+            foreach ($this->cart as $item) {
+                $venda->items()->create([
+                    'produto_id' => $item['id'], 'descricao_produto' => $item['nome'],
+                    'quantidade' => $item['quantidade'], 'preco_unitario' => $item['preco'],
+                    'subtotal_item' => $item['total_item'],
+                ]);
+                $produto = Produto::find($item['id']);
+                if ($produto) {
+                    $saldoAnterior = $produto->estoque_atual;
+                    $produto->decrement('estoque_atual', $item['quantidade']);
+                    $saldoNovo = $produto->fresh()->estoque_atual;
+                    DB::table('estoque_movimentos')->insert([
+                        'empresa_id' => auth()->user()->empresa_id, 'produto_id' => $produto->id,
+                        'user_id' => auth()->id(), 'tipo_movimento' => 'saida_venda',
+                        'quantidade' => $item['quantidade'], 'saldo_anterior' => $saldoAnterior,
+                        'saldo_novo' => $saldoNovo, 'origem_id' => $venda->id,
+                        'origem_type' => Venda::class, 'created_at' => now(), 'updated_at' => now(),
+                    ]);
+                }
+            }
+            
+            DB::commit();
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            session()->flash('error', 'ERRO AO FINALIZAR VENDA: ' . $e->getMessage());
+            return;
+        }
+
+        if ($venda) {
+            try {
+                $geradorContas = new GeradorContasReceberService();
+                $geradorContas->gerarPelaVenda($venda);
+            } catch (\Exception $e) {
+                Log::error("ERRO AO GERAR CONTAS A RECEBER PARA VENDA #{$venda->id}: " . $e->getMessage());
+                session()->flash('warning', 'Venda finalizada, mas houve um erro ao gerar as contas a receber. Verifique o financeiro.');
+            }
+        }
+
+        session()->flash('success', 'Venda finalizada com sucesso!');
+        return redirect()->route('pedidos.index');
     }
 }

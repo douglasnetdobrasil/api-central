@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class VendaPagamento extends Model
 {
@@ -19,7 +20,7 @@ class VendaPagamento extends Model
     ];
 
     // Relacionamento para buscar os detalhes da forma de pagamento
-    public function forma()
+    public function formaPagamento(): BelongsTo
     {
         return $this->belongsTo(FormaPagamento::class, 'forma_pagamento_id');
     }

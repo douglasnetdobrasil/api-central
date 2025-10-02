@@ -55,6 +55,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('transportadoras', TransportadoraController::class);
     Route::resource('formas-pagamento', FormaPagamentoController::class);
 
+    Route::resource('estoque', App\Http\Controllers\EstoqueController::class)->only(['index', 'show']);
+
     // Admin (Original - MANTIDO)
     Route::middleware(['can:acessar-admin'])->group(function () {
         Route::resource('perfis', RoleController::class)->except(['show']);
@@ -75,7 +77,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/pedidos/importar-orcamento', [PedidoController::class, 'importarOrcamento'])->name('pedidos.importarOrcamento');
     Route::get('/pedidos/{venda}/edit', [PedidoController::class, 'edit'])->name('pedidos.edit');
     Route::post('/pedidos/{venda}/emitir-nfe', [NFeController::class, 'emitir'])->name('pedidos.emitirNFe');
-    Route::resource('contas_a_pagar', App\Http\Controllers\ContaAPagarController::class); 
+    Route::resource('contas_a_pagar', App\Http\Controllers\ContaAPagarController::class);
+    Route::resource('contas_a_receber', App\Http\Controllers\ContaAReceberController::class); 
     // NFe (Original - MANTIDO)
     Route::prefix('nfe')->name('nfe.')->group(function () {
         Route::get('/', [NFeController::class, 'index'])->name('index');

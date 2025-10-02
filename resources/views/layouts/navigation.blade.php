@@ -195,7 +195,7 @@
 
             <x-slot name="content">
                 @can('ver-contas-receber')
-                    <x-dropdown-link :href="route('produtos.index')">
+                    <x-dropdown-link :href="route('contas_a_receber.index')">
                         {{ __('Contas a Receber') }}
                     </x-dropdown-link>
                 @endcan
