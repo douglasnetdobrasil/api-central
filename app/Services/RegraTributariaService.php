@@ -14,14 +14,27 @@ class RegraTributariaService
      * Encontra a regra tributária mais aplicável para uma determinada operação.
      * A busca é feita em cascata, da mais específica para a mais genérica.
      */
-    public function findRule(string $cfop, Empresa $emitente, Cliente $destinatario): ?RegraTributaria
+    public function findRule(string $cfop, Empresa $emitente, $destinatarioInfo): ?RegraTributaria
     {
-        $ufOrigem = $emitente->uf;
-        $ufDestino = $destinatario->estado; // Corrigido para 'estado' do cliente
-        $crtEmitente = $emitente->crt;
+        // ================== LÓGICA DE ADAPTAÇÃO (NOSSA CORREÇÃO) ==================
+        $ufDestino = '';
+        if ($destinatarioInfo instanceof Cliente) {
+            // Se recebemos o objeto Cliente, pegamos o estado dele. (Cenário da NFe)
+            $ufDestino = $destinatarioInfo->estado;
+        } elseif (is_string($destinatarioInfo)) {
+            // Se recebemos um texto, usamos ele diretamente como a UF. (Cenário da NFCe)
+            $ufDestino = $destinatarioInfo;
+        } else {
+            // Se não for nenhum dos dois, usamos a UF da própria empresa como padrão.
+            $ufDestino = $emitente->uf;
+        }
+        // =========================================================================
 
+        $ufOrigem = $emitente->uf;
+        $crtEmitente = $emitente->crt;
         $query = RegraTributaria::where('cfop', $cfop)->where('ativo', true);
 
+        // ================== A SUA LÓGICA DE BUSCA (PERMANECE INTACTA) ==================
         // 1ª Tentativa: Regra super específica (CFOP + UFs + CRT)
         $rule = (clone $query)
             ->where('uf_origem', $ufOrigem)

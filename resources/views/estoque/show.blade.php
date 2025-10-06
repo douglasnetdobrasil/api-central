@@ -15,7 +15,8 @@
 
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-        @livewire('estoque.movimentacao-produto', ['produto' => $produto])
+            {{-- ALTERADO AQUI: Passando apenas o ID do produto --}}
+            @livewire('estoque.movimentacao-produto', ['produtoId' => $produto->id])
         </div>
     </div>
 </x-app-layout>

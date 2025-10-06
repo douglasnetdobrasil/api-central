@@ -14,6 +14,12 @@
                     <span class="block sm:inline">{{ session('success') }}</span>
                 </div>
             @endif
+            @if (session('error'))
+            <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <strong class="font-bold">Ocorreu um Erro!</strong>
+                <span class="block sm:inline">{{ session('error') }}</span>
+            </div>
+        @endif
 
             <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-6">
@@ -31,8 +37,10 @@
                 </div>
             </div>
 
+            {{-- ======================= INÍCIO DA CORREÇÃO ======================= --}}
 
-            <form action="{{ route('compras.update', $compra->id) }}" method="POST">
+            {{-- O formulário de UPDATE agora tem um ID e engloba apenas a seção de itens. --}}
+            <form action="{{ route('compras.update', $compra->id) }}" method="POST" id="update-form">
                 @csrf
                 @method('PUT')
 
@@ -41,95 +49,69 @@
                         Itens da Nota para Conferência
                     </h3>
                     <div class="space-y-6">
-                    @foreach ($compra->itens as $item)
-    {{-- E substitua tudo até o @endforeach pelo código abaixo --}}
-
-    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
-
-        {{-- Container Flex para Nome e Valores (Layout Mantido) --}}
-        <div class="flex justify-between items-start gap-4">
-            <div class="flex-grow">
-                <span class="block text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                    ITEM #{{ $loop->iteration }}
-                </span>
-                <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $item->descricao_item_nota }}</p>
-            </div>
-            <div class="flex items-center space-x-8 md:space-x-12 text-right flex-shrink-0">
-                <div>
-                    <span class="block text-xs font-medium text-gray-500">PREÇO UNIT. (NOTA)</span>
-                    <p class="text-md font-semibold">R$ {{ number_format($item->preco_custo_nota, 2, ',', '.') }}</p>
-                </div>
-                <div>
-                    <span class="block text-xs font-medium text-gray-500">QTD</span>
-                    <p class="text-md font-semibold">{{ number_format($item->quantidade, 2, ',', '.') }}</p>
-                </div>
-                <div>
-                    <span class="block text-xs font-medium text-gray-500">SUBTOTAL</span>
-                    <p class="text-md font-semibold">R$ {{ number_format($item->subtotal, 2, ',', '.') }}</p>
-                </div>
-            </div>
-        </div>
-
-        {{-- ======================= INÍCIO DA CORREÇÃO DE LAYOUT ======================= --}}
-        {{-- Dados Fiscais (Layout corrigido para Grid para evitar sobreposição) --}}
-        <div class="grid grid-cols-3 gap-x-6 gap-y-2 py-2">
-            <div>
-                <x-input-label value="NCM" />
-                <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->ncm ?? 'N/A' }}</p>
-            </div>
-            <div>
-                <x-input-label value="CFOP" />
-                <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->cfop ?? 'N/A' }}</p>
-            </div>
-            <div>
-                <x-input-label value="Código de Barras (Sistema)" />
-                <p class="mt-1 text-sm font-semibold text-gray-800 dark:text-gray-200">{{ $item->produto->codigo_barras ?? 'N/A' }}</p>
-            </div>
-        </div>
-        {{-- ======================== FIM DA CORREÇÃO DE LAYOUT ======================== --}}
-
-
-        {{-- Campos Editáveis (Layout Mantido) --}}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div>
-                <x-input-label for="preco_venda_{{ $item->id }}" value="Preço de Venda (Consumidor Final)" />
-                <x-text-input type="number" step="0.01" name="itens[{{ $item->id }}][preco_venda]" id="preco_venda_{{ $item->id }}" class="block mt-1 w-full" 
-                              value="{{ old('itens.'.$item->id.'.preco_venda', number_format($item->produto->preco_venda ?? 0, 2, '.', '')) }}" />
-            </div>
-            <div>
-                <x-input-label for="produto_{{ $item->id }}" value="Vincular ao Produto do Sistema" />
-                <select name="itens[{{ $item->id }}][produto_id]" id="produto_{{ $item->id }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
-                    <option value="">Selecione um produto...</option>
-                    @foreach ($produtos as $produto)
-                        <option value="{{ $produto->id }}" @selected(old('itens.'.$item->id.'.produto_id', $item->produto_id) == $produto->id)>
-                            {{ $produto->nome }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
-    </div>
-@endforeach
-                    </div>
-
-                    <div class="mt-6 flex flex-wrap items-center justify-end gap-4">
-                        {{-- O botão de remover foi movido para fora do formulário principal para evitar submissões aninhadas --}}
-                        <div id="delete-button-container">
-                            <form action="{{ route('compras.destroy', $compra->id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja remover esta nota da digitação? Esta ação não pode ser desfeita.');">
-                                @csrf
-                                @method('DELETE')
-                                <x-danger-button type="submit">
-                                    Remover Nota
-                                </x-danger-button>
-                            </form>
-                        </div>
-
-                        <x-primary-button>
-                            Salvar Alterações e Finalizar
-                        </x-primary-button>
+                        @foreach ($compra->itens as $item)
+                            <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
+                                <div class="flex justify-between items-start gap-4">
+                                    <div class="flex-grow">
+                                        <span class="block text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                            ITEM #{{ $loop->iteration }}
+                                        </span>
+                                        <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $item->descricao_item_nota }}</p>
+                                    </div>
+                                    <div class="flex items-center space-x-8 md:space-x-12 text-right flex-shrink-0">
+                                        <div><span class="block text-xs font-medium text-gray-500">PREÇO UNIT. (NOTA)</span><p class="text-md font-semibold">R$ {{ number_format($item->preco_custo_nota, 2, ',', '.') }}</p></div>
+                                        <div><span class="block text-xs font-medium text-gray-500">QTD</span><p class="text-md font-semibold">{{ number_format($item->quantidade, 2, ',', '.') }}</p></div>
+                                        <div><span class="block text-xs font-medium text-gray-500">SUBTOTAL</span><p class="text-md font-semibold">R$ {{ number_format($item->subtotal, 2, ',', '.') }}</p></div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-3 gap-x-6 gap-y-2 py-2">
+                                    <div><x-input-label value="NCM" /><p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->ncm ?? 'N/A' }}</p></div>
+                                    <div><x-input-label value="CFOP" /><p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ $item->cfop ?? 'N/A' }}</p></div>
+                                    <div><x-input-label value="Código de Barras (Sistema)" /><p class="mt-1 text-sm font-semibold text-gray-800 dark:text-gray-200">{{ $item->produto->codigo_barras ?? 'N/A' }}</p></div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                    <div>
+                                        <x-input-label for="preco_venda_{{ $item->id }}" value="Preço de Venda (Consumidor Final)" />
+                                        <x-text-input type="number" step="0.01" name="itens[{{ $item->id }}][preco_venda]" id="preco_venda_{{ $item->id }}" class="block mt-1 w-full" 
+                                                      value="{{ old('itens.'.$item->id.'.preco_venda', number_format($item->produto->preco_venda ?? 0, 2, '.', '')) }}" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="produto_{{ $item->id }}" value="Vincular ao Produto do Sistema" />
+                                        <select name="itens[{{ $item->id }}][produto_id]" id="produto_{{ $item->id }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                                            <option value="">Selecione um produto...</option>
+                                            @foreach ($produtos as $produto)
+                                                <option value="{{ $produto->id }}" @selected(old('itens.'.$item->id.'.produto_id', $item->produto_id) == $produto->id)>
+                                                    {{ $produto->nome }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
                     </div>
                 </div>
-            </form>
+            </form> {{-- O formulário de UPDATE agora fecha aqui, antes dos botões. --}}
+
+            {{-- Este container de botões agora fica FORA do formulário de update. --}}
+            <div class="mt-6 flex flex-wrap items-center justify-end gap-4">
+                
+                {{-- O formulário de DELEÇÃO agora está separado e funcionará corretamente. --}}
+                <form action="{{ route('compras.destroy', $compra->id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja remover esta nota? O estoque será estornado.');">
+                    @csrf
+                    @method('DELETE')
+                    <x-danger-button type="submit">
+                        Remover Nota
+                    </x-danger-button>
+                </form>
+
+                {{-- Este botão de SALVAR agora submete o formulário de UPDATE pelo seu ID. --}}
+                <x-primary-button type="submit" form="update-form">
+                    Salvar Alterações e Finalizar
+                </x-primary-button>
+            </div>
+
+            {{-- ======================== FIM DA CORREÇÃO ======================== --}}
         </div>
     </div>
 </x-app-layout>

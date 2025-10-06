@@ -37,6 +37,7 @@ class Empresa extends Model
         'csc_nfe',
         'csc_id_nfe',
         'nfe_proximo_numero',
+        'nfce_proximo_numero',
     ];
 
     /**

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Scopes\EmpresaScope;
 
+
 class Compra extends Model
 {
     use HasFactory;
@@ -72,6 +73,16 @@ class Compra extends Model
     {
         return $this->hasMany(ItemCompra::class);
     }
+
+    public function movimentacoesEstoque()
+    {
+        return $this->morphMany(EstoqueMovimento::class, 'origem');
+    }
+
+    public function contasAPagar()
+{
+    return $this->hasMany(\App\Models\ContaAPagar::class);
+}
 
     protected static function booted(): void
     {

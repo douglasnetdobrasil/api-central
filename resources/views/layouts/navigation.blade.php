@@ -246,12 +246,12 @@
 
             <x-slot name="content">
                 @can('ver-movimentacoes-estoque')
-                    <x-dropdown-link :href="route('produtos.index')">
+                    <x-dropdown-link :href="route('estoque.index')">
                         {{ __('Movimentações') }}
                     </x-dropdown-link>
                 @endcan
                 @can('ver-transferencias-estoque')
-                    <x-dropdown-link :href="route('fornecedores.index')">
+                    <x-dropdown-link :href="route('estoque.index')">
                         {{ __('Transferências') }}
                     </x-dropdown-link>
                 @endcan

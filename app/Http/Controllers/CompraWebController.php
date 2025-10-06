@@ -17,6 +17,7 @@ use App\Models\Categoria;
 use Illuminate\Support\Facades\Session;
 use App\Models\ConfiguracaoFiscalPadrao;
 use App\Models\DadoFiscalProduto;
+use App\Services\EstoqueService;
 use Exception;
 
 class CompraWebController extends Controller
@@ -249,9 +250,26 @@ class CompraWebController extends Controller
                 $produtoFinal = null;
     
                 if ($produtoIdVinculado) {
-                    if ($produto = Produto::find($produtoIdVinculado)) {
-                        $produto->update($dadosFinaisProduto);
-                        $produtoFinal = $produto;
+                    $produto = Produto::find($produtoIdVinculado);
+                    if ($produto) {
+                        // ======================= INÍCIO DA CORREÇÃO =======================
+                        //
+                        // Criamos um array APENAS com os dados que devem ser atualizados
+                        // em um produto que já existe. Note que 'nome' e 'codigo_barras' não estão aqui.
+                        //
+                        $dadosParaAtualizar = [
+                            'preco_custo' => $precoCusto,
+                            'preco_venda' => $precoVendaFinal,
+                            'margem_lucro' => $margemFinal,
+                            'categoria_id' => $categoriaFinal, // Atualiza a categoria se foi alterada na tela
+                            'ativo' => true,
+                        ];
+                
+                        $produto->update($dadosParaAtualizar); // Usamos o novo array para a atualização
+                        //
+                        // ======================== FIM DA CORREÇÃO =========================
+                        
+                        $produtoFinal = $produto; // O produto final é o produto que encontramos e atualizamos
                     }
                 } else {
                     $produtoFinal = Produto::updateOrCreate(
@@ -281,7 +299,9 @@ class CompraWebController extends Controller
                     }
                     // ===== FIM DA LÓGICA DE APLICAÇÃO DOS DADOS FISCAIS PADRÃO =====
 
-                    $produtoFinal->increment('estoque_atual', (float)$itemOriginal['quantidade']);
+                    $quantidadeEntrada = (float)$itemOriginal['quantidade'];
+                    $observacao = "Referente à NF de importação #" . $dadosNFeDaSessao['numero_nota'];
+                    EstoqueService::registrarMovimento($produtoFinal, 'entrada_compra', $quantidadeEntrada, $compra, $observacao);
                     ProdutoFornecedor::updateOrCreate(
                         ['fornecedor_id' => $fornecedor->id, 'codigo_produto_fornecedor' => $itemOriginal['codigo_fornecedor']],
                         ['produto_id' => $produtoFinal->id]
@@ -348,9 +368,9 @@ class CompraWebController extends Controller
                 // 4. Atualiza o estoque e o preço de custo do produto principal
                 $produto = Produto::find($itemData['produto_id']);
                 if ($produto) {
-                    $produto->increment('estoque_atual', $itemData['quantidade']);
-                    // Atualiza o preço de custo do produto para o valor desta última compra
-                    $produto->update(['preco_custo' => $itemData['preco_custo']]);
+                    $quantidadeEntrada = (float)$itemData['quantidade'];
+                    $observacao = "Referente ao Doc. manual #" . $validatedData['numero_nota'];
+                    EstoqueService::registrarMovimento($produto, 'entrada_compra', $quantidadeEntrada, $compra, $observacao);
                 }
             }
             
@@ -401,28 +421,37 @@ class CompraWebController extends Controller
 
     public function destroy(Compra $compra)
     {
+           
         DB::beginTransaction();
         try {
             // 1. Estorna o estoque de cada produto
             foreach ($compra->itens as $item) {
                 if ($item->produto) {
-                    $item->produto->decrement('estoque_atual', $item->quantidade);
+                    $quantidadeSaida = (float)$item->quantidade;
+                    $observacao = "Estorno da entrada da NF #" . $compra->numero_nota;
+                    EstoqueService::registrarMovimento($item->produto, 'estorno_compra', $quantidadeSaida, $compra, $observacao);
                 }
             }
     
             // 2. Apaga os registos dos itens da nota
             $compra->itens()->delete();
+   
+            // =================== LINHA ADICIONADA ===================
+            // 3. Apaga as contas a pagar vinculadas a esta compra
+            $compra->contasAPagar()->delete();
+            // ========================================================
     
-            // 3. Apaga a nota principal
+            // 4. Apaga a nota principal
             $compra->delete();
     
             DB::commit();
     
-            return redirect()->route('compras.index')->with('success', 'Nota fiscal, itens e estoque estornado com sucesso.');
+            return redirect()->route('compras.index')->with('success', 'Nota fiscal, itens, contas a pagar e estoque estornado com sucesso.');
     
         } catch (\Exception $e) {
             DB::rollBack();
-            return redirect()->back()->with('error', 'Ocorreu um erro ao remover a nota: ' . $e->getMessage());
+            // Agora que a view exibe o erro, esta linha será muito útil!
+            return redirect()->back()->with('error', 'Não foi possível remover a nota: ' . $e->getMessage());
         }
     }
 }
