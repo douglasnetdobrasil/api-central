@@ -19,6 +19,12 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\EstoqueController;
 use App\Http\Controllers\PdvCaixaController;
+
+
+use App\Services\NFCeService;
+use Illuminate\Support\Facades\Auth;
+use App\Models\Empresa;
+
 // ADICIONE OS NOVOS CONTROLLERS
 use App\Http\Controllers\PerfilFiscalController;
 use App\Http\Controllers\ConfiguracaoController;
@@ -136,8 +142,53 @@ Route::get('/estoque/{produto}', [EstoqueController::class, 'show'])->name('esto
 
 
     Route::get('/pdv-caixa', PdvCaixaController::class)
-    ->middleware('auth') // Protege a rota
+    ->middleware(['auth', 'can:operar-caixa']) // <-- ADICIONE O 'can:operar-caixa'
     ->name('pdv-caixa.index');
+
+
+    Route::get('/teste-status-sefaz', function () {
+        if (!Auth::check()) {
+            return 'Você precisa estar logado para fazer este teste.';
+        }
+    
+        try {
+            // Pega a empresa do usuário logado
+            $empresa = Auth::user()->empresa;
+            if (!$empresa) {
+                return "Usuário não tem uma empresa associada.";
+            }
+    
+            // Instancia o nosso serviço
+            $nfceService = new NFCeService();
+    
+            // Usa Reflection para chamar o método 'bootstrap' que é privado
+            $reflection = new \ReflectionClass($nfceService);
+            $method = $reflection->getMethod('bootstrap');
+            $method->setAccessible(true);
+            $method->invoke($nfceService, $empresa);
+    
+            // Pega o objeto 'tools' já configurado
+            $toolsProperty = $reflection->getProperty('tools');
+            $toolsProperty->setAccessible(true);
+            $tools = $toolsProperty->getValue($nfceService);
+    
+            // ================== A CORREÇÃO ESTÁ AQUI ==================
+            // O nome correto da função é 'sefazStatus'
+            $response = $tools->sefazStatus();
+            // ==========================================================
+    
+            // Mostra o resultado na tela
+            $std = new \NFePHP\NFe\Common\Standardize($response);
+            dd($std->toStd());
+    
+        } catch (\Exception $e) {
+            // Se der erro, mostra a mensagem de erro
+            dd($e->getMessage());
+        }
+    });
+
+
+    
 
     // Rota de teste (Original - MANTIDO)
     Route::get('/teste-nfe', function () {

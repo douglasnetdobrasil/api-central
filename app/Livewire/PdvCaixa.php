@@ -5,83 +5,107 @@ namespace App\Livewire;
 use Livewire\Component;
 use App\Models\Produto;
 use App\Models\Venda;
-use App\Models\FormaPagamento; // Importante: Adicionar o Model
+use App\Models\FormaPagamento;
 use App\Services\NFCeService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Caixa;
+use App\Models\Cliente;
 
 class PdvCaixa extends Component
 {
+    public ?Caixa $caixaSessao = null;
+    public $valorAbertura;
+    
     // Itens e totais da venda
     public $cart = [];
+    public $subtotal = 0.00;
+    public $descontoTotal = 0.00;
     public $total = 0.00;
 
     // Inputs da interface
     public $barcode = '';
     public $quantidade = 1;
 
-    // --- PROPRIEDADES PARA O SISTEMA DE PAGAMENTO ---
+    // Propriedades para o sistema de pagamento
     public $formasPagamento = [];
     public $pagamentos = [];
     public $valorRecebido = 0.00;
     public $troco = 0.00;
     public $faltaPagar = 0.00;
-    public $showPaymentModal = false;
     public $valorPagamentoAtual;
     public $formaPagamentoAtual;
-    // ------------------------------------------------
 
-    // Mensagens e estado da UI
+    // Propriedades para controle dos modais e estado da UI
+    public $showPaymentModal = false;
+    public $showOptionsMenu = false;
+    public $showIdentificarModal = false;
+    public $showDescontoModal = false;
+    public $showPinModal = false;
     public $mensagemErro = '';
     public $vendaFinalizada = false;
     public $dadosUltimaNfce = [];
+    
+    // Propriedades para o cliente
+    public $clienteId = null;
+    public $clienteNome = '';
+    public $documentoCliente = '';
+
+    // Propriedades para desconto e autorização
+    public $descontoTipo = 'valor';
+    public $descontoValor = 0;
+    public $supervisorPin = '';
+    public $acaoParaAutorizar = null;
+    public $parametrosDaAcao = null;
+    public $pinIncorreto = false;
 
     protected $listeners = ['resetPdv' => 'resetarPdv'];
 
-    /**
-     * Executado quando o componente é inicializado.
-     */
     public function mount()
     {
-        // Carrega as formas de pagamento disponíveis uma única vez
-        $this->formasPagamento = FormaPagamento::where('empresa_id', Auth::user()->empresa_id)
-                                               ->where('ativo', true)
-                                               ->orderBy('nome')
-                                               ->get();
-        // Define uma forma de pagamento padrão para o select
-        $this->formaPagamentoAtual = $this->formasPagamento->first()->id ?? null;
+        $this->verificarSessaoCaixa();
+        if ($this->caixaSessao) {
+            $this->formasPagamento = FormaPagamento::where('empresa_id', Auth::user()->empresa_id)
+                                                   ->where('ativo', true)->orderBy('nome')->get();
+            if ($this->formasPagamento->isNotEmpty()) {
+                $this->formaPagamentoAtual = $this->formasPagamento->first()->id;
+            }
+        }
     }
 
-    /**
-     * Adiciona um produto ao carrinho pelo código de barras.
-     */
+    public function verificarSessaoCaixa()
+    {
+        $this->caixaSessao = Caixa::where('user_id', Auth::id())->where('status', 'aberto')->first();
+    }
+
+    public function abrirCaixa()
+    {
+        $this->validate(['valorAbertura' => 'required|numeric|min:0']);
+        $this->caixaSessao = Caixa::create([
+            'empresa_id' => Auth::user()->empresa_id,
+            'user_id' => Auth::id(),
+            'valor_abertura' => $this->valorAbertura,
+            'status' => 'aberto',
+        ]);
+        $this->reset('valorAbertura');
+        $this->mount();
+    }
+
     public function addProduto()
     {
         $this->reset('mensagemErro');
         if ($this->vendaFinalizada) return;
+        if (empty($this->barcode)) return;
 
-        if (empty($this->barcode)) {
-            return;
-        }
-
-        $produto = Produto::where('codigo_barras', $this->barcode)
-                          ->where('empresa_id', Auth::user()->empresa_id)
-                          ->first();
+        $produto = Produto::where('codigo_barras', $this->barcode)->where('empresa_id', Auth::user()->empresa_id)->first();
 
         if ($produto) {
             $cartKey = collect($this->cart)->search(fn($item) => $item['id'] === $produto->id);
-
             if ($cartKey !== false) {
                 $this->cart[$cartKey]['qtd'] += $this->quantidade;
             } else {
-                $this->cart[] = [
-                    'id' => $produto->id,
-                    'nome' => $produto->nome,
-                    'preco' => (float) $produto->preco_venda,
-                    'qtd' => (int) $this->quantidade,
-                ];
+                $this->cart[] = ['id' => $produto->id, 'nome' => $produto->nome, 'preco' => (float) $produto->preco_venda, 'qtd' => (int) $this->quantidade];
             }
-            
             $this->recalcularTotal();
             $this->reset('barcode', 'quantidade');
             $this->dispatch('produto-adicionado');
@@ -90,9 +114,6 @@ class PdvCaixa extends Component
         }
     }
 
-    /**
-     * Remove um item do carrinho.
-     */
     public function removerItem($cartKey)
     {
         if (isset($this->cart[$cartKey]) && !$this->vendaFinalizada) {
@@ -102,63 +123,31 @@ class PdvCaixa extends Component
         }
     }
 
-    /**
-     * Recalcula o valor total da venda e os pagamentos.
-     */
     public function recalcularTotal()
     {
-        $this->total = collect($this->cart)->sum(fn($item) => $item['preco'] * $item['qtd']);
+        $this->subtotal = collect($this->cart)->sum(fn($item) => $item['preco'] * $item['qtd']);
+        $this->total = $this->subtotal - $this->descontoTotal;
         $this->recalcularPagamentos();
     }
 
-    // --- MÉTODOS NOVOS E ATUALIZADOS PARA O PAGAMENTO ---
-
-    /**
-     * Abre o modal de pagamentos.
-     */
-    public function abrirModalPagamento()
+    public function recalcularPagamentos()
     {
-        if(empty($this->cart) || $this->vendaFinalizada) return;
-        $this->recalcularPagamentos();
-        $this->valorPagamentoAtual = $this->faltaPagar > 0 ? number_format($this->faltaPagar, 2, '.', '') : '';
-        $this->showPaymentModal = true;
+        $this->valorRecebido = collect($this->pagamentos)->sum('valor');
+        $diferenca = $this->valorRecebido - $this->total;
+        $this->troco = $diferenca > 0 ? $diferenca : 0.00;
+        $this->faltaPagar = $diferenca < 0 ? abs($diferenca) : 0.00;
     }
 
-    /**
-     * Fecha o modal de pagamentos.
-     */
-    public function fecharModalPagamento()
-    {
-        $this->showPaymentModal = false;
-    }
-    
-    /**
-     * Adiciona um pagamento à lista da venda atual.
-     */
     public function addPagamento()
     {
-        $this->validate([
-            'valorPagamentoAtual' => 'required|numeric|min:0.01',
-            'formaPagamentoAtual' => 'required|exists:forma_pagamentos,id',
-        ]);
-
+        $this->validate(['valorPagamentoAtual' => 'required|numeric|min:0.01', 'formaPagamentoAtual' => 'required|exists:forma_pagamentos,id']);
         $forma = $this->formasPagamento->find($this->formaPagamentoAtual);
-
-        $this->pagamentos[] = [
-            'forma_pagamento_id' => $forma->id,
-            'nome' => $forma->nome,
-            'valor' => (float) $this->valorPagamentoAtual,
-        ];
-
+        $this->pagamentos[] = ['forma_pagamento_id' => $forma->id, 'nome' => $forma->nome, 'valor' => (float) $this->valorPagamentoAtual];
         $this->recalcularPagamentos();
-        // Prepara o campo de valor para o próximo pagamento
         $this->valorPagamentoAtual = $this->faltaPagar > 0 ? number_format($this->faltaPagar, 2, '.', '') : '';
         $this->formaPagamentoAtual = $this->formasPagamento->first()->id ?? null;
     }
 
-    /**
-     * Remove um pagamento da lista.
-     */
     public function removerPagamento($index)
     {
         if (isset($this->pagamentos[$index])) {
@@ -168,91 +157,146 @@ class PdvCaixa extends Component
         }
     }
 
-    /**
-     * Recalcula os totais de pagamento (recebido, falta, troco).
-     */
-    public function recalcularPagamentos()
+    public function identificarCliente()
     {
-        $this->valorRecebido = collect($this->pagamentos)->sum('valor');
-        $diferenca = $this->valorRecebido - $this->total;
-
-        $this->troco = $diferenca > 0 ? $diferenca : 0.00;
-        $this->faltaPagar = $diferenca < 0 ? abs($diferenca) : 0.00;
+        $this->resetErrorBag();
+        if (empty($this->documentoCliente)) { $this->removerCliente(); return; }
+        $documentoLimpo = preg_replace('/[^0-9]/', '', $this->documentoCliente);
+        $cliente = Cliente::where('empresa_id', Auth::user()->empresa_id)->where('cpf_cnpj', $documentoLimpo)->first();
+        if ($cliente) {
+            $this->clienteId = $cliente->id;
+            $this->clienteNome = $cliente->nome;
+            $this->documentoCliente = $documentoLimpo;
+            $this->showIdentificarModal = false; 
+            $this->showOptionsMenu = false;      
+        } else {
+            $this->addError('finalizacao', 'Cliente não encontrado com este CPF/CNPJ.');
+            $this->documentoCliente = '';
+        }
     }
 
-    /**
-     * Método ATUALIZADO para finalizar a venda.
-     */
+    public function removerCliente() 
+    { 
+        $this->reset('clienteId', 'clienteNome', 'documentoCliente'); 
+    }
+
+    public function abrirModalPagamento() 
+    { 
+        if(empty($this->cart) || $this->vendaFinalizada) return; 
+        $this->recalcularPagamentos(); 
+        $this->valorPagamentoAtual = $this->faltaPagar > 0 ? number_format($this->faltaPagar, 2, '.', '') : ''; 
+        $this->showPaymentModal = true; 
+    }
+    
+    public function fecharModalPagamento() { $this->showPaymentModal = false; }
+    public function abrirMenuOpcoes() { $this->showOptionsMenu = true; }
+    public function fecharMenuOpcoes() { $this->showOptionsMenu = false; }
+    public function abrirModalDesconto() { $this->showOptionsMenu = false; $this->showDescontoModal = true; }
+    public function fecharModalPin() { $this->showPinModal = false; }
+
+    public function solicitarAutorizacao($acao, $parametros = null)
+    {
+        $this->acaoParaAutorizar = $acao;
+        $this->parametrosDaAcao = $parametros;
+        $this->pinIncorreto = false;
+        $this->supervisorPin = '';
+        $this->showPinModal = true;
+    }
+
+    public function verificarPin()
+    {
+        $pinCorreto = '1234';
+        if ($this->supervisorPin === $pinCorreto) {
+            $this->showPinModal = false;
+            $this->pinIncorreto = false;
+            if (method_exists($this, $this->acaoParaAutorizar)) {
+                $this->{$this->acaoParaAutorizar}($this->parametrosDaAcao);
+            }
+            $this->reset('acaoParaAutorizar', 'parametrosDaAcao');
+        } else {
+            $this->pinIncorreto = true;
+            $this->supervisorPin = '';
+            $this->addError('pin', 'PIN incorreto!');
+        }
+    }
+
+    public function aplicarDesconto()
+    {
+        $this->validate(['descontoValor' => 'required|numeric|min:0']);
+        $valor = (float) $this->descontoValor;
+        if ($this->descontoTipo == 'valor') {
+            $this->descontoTotal = $valor > $this->subtotal ? $this->subtotal : $valor;
+        } else {
+            $this->descontoTotal = $this->subtotal * ($valor / 100);
+        }
+        $this->recalcularTotal();
+        $this->showDescontoModal = false;
+        $this->reset('descontoValor', 'descontoTipo');
+    }
+
+    public function handleF8()
+    {
+        if ($this->vendaFinalizada || empty($this->cart)) return;
+        if ($this->showPaymentModal) {
+            if ($this->faltaPagar <= 0) {
+                $this->finalizarVenda(app(NFCeService::class));
+            } else {
+                $this->addPagamento();
+            }
+        } else {
+            $this->abrirModalPagamento();
+        }
+    }
+
     public function finalizarVenda(NFCeService $nfceService)
     {
-        if ($this->faltaPagar > 0.00 || empty($this->pagamentos)) {
-            $this->addError('finalizacao', 'O valor pago é menor que o total da venda.');
-            return;
-        }
+        if (!$this->caixaSessao) { $this->addError('finalizacao', 'Nenhum caixa aberto.'); return; }
+        $this->resetErrorBag();
 
         DB::beginTransaction();
         try {
-            // 1. Salva a Venda no banco de dados
             $venda = Venda::create([
+                'caixa_id' => $this->caixaSessao->id,
                 'empresa_id' => Auth::user()->empresa_id,
                 'user_id' => Auth::id(),
-                'cliente_id' => null,
-                'subtotal' => $this->total,
-                'desconto' => 0,
+                'cliente_id' => $this->clienteId,
+                'subtotal' => $this->subtotal,
+                'desconto' => $this->descontoTotal,
                 'total' => $this->total,
                 'status' => 'concluida',
             ]);
 
-            // 2. Salva os Itens da Venda
             foreach ($this->cart as $item) {
-                $venda->items()->create([
-                    'produto_id' => $item['id'],
-                    'descricao_produto' => $item['nome'],
-                    'quantidade' => $item['qtd'],
-                    'preco_unitario' => $item['preco'],
-                    'subtotal_item' => $item['preco'] * $item['qtd'],
-                ]);
+                $venda->items()->create(['produto_id' => $item['id'], 'descricao_produto' => $item['nome'], 'quantidade' => $item['qtd'], 'preco_unitario' => $item['preco'], 'subtotal_item' => $item['preco'] * $item['qtd']]);
             }
             
-            // 3. Salva os Pagamentos da Venda
             foreach ($this->pagamentos as $pagamento) {
-                $venda->pagamentos()->create([
-                    'empresa_id' => Auth::user()->empresa_id,
-                    'forma_pagamento_id' => $pagamento['forma_pagamento_id'],
-                    'valor' => $pagamento['valor'],
-                ]);
+                $venda->pagamentos()->create(['empresa_id' => Auth::user()->empresa_id, 'forma_pagamento_id' => $pagamento['forma_pagamento_id'], 'valor' => $pagamento['valor']]);
             }
 
-            // 4. Prepara o objeto Venda para o serviço de emissão
             $venda->load('items.produto.dadosFiscais', 'empresa', 'cliente', 'pagamentos.formaPagamento');
-
-            // 5. Chama o serviço para emitir a NFC-e
             $resultado = $nfceService->emitir($venda);
 
             if ($resultado['success']) {
                 $venda->update(['nfe_chave_acesso' => $resultado['chave']]);
                 DB::commit();
-
                 $this->vendaFinalizada = true;
                 $this->dadosUltimaNfce = $resultado;
-                $this->showPaymentModal = false; // Fecha o modal após sucesso
+                $this->showPaymentModal = false;
             } else {
                 throw new \Exception($resultado['message']);
             }
-
         } catch (\Exception $e) {
             DB::rollBack();
             $this->addError('finalizacao', 'Erro: ' . $e->getMessage());
         }
     }
 
-    /**
-     * Limpa todos os dados para uma nova venda.
-     */
     public function resetarPdv()
     {
         $this->reset();
-        $this->mount(); // Re-inicializa o componente para buscar as formas de pagamento
+        $this->mount();
+        $this->removerCliente();
         $this->dispatch('pdv-resetado');
     }
 

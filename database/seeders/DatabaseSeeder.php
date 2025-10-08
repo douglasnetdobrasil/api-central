@@ -36,6 +36,7 @@ class DatabaseSeeder extends Seeder
             UnidadeDeMedidaSeeder::class,
             FormaPagamentoSeeder::class,
             NaturezaOperacaoSeeder::class,
+            PermissaoCaixaSeeder::class
             
             // ...seus outros seeders aqui
         ]);

@@ -607,7 +607,7 @@ class NFeService
         } else {
             foreach ($venda->pagamentos as $pagamento) {
                 $det = new stdClass();
-                $det->tPag = $pagamento->forma->codigo_sefaz;
+                $det->tPag = $pagamento->formaPagamento->codigo_sefaz; 
                 $det->vPag = number_format($pagamento->valor, 2, '.', '');
                 if (in_array($det->tPag, ['03', '04'])) {
                     $det->tpIntegra = 2;

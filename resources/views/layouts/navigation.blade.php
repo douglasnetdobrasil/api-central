@@ -115,9 +115,15 @@
                         {{ __('Pedidos de Venda') }}
                     </x-dropdown-link>
                 @endcan
+                
                 @can('ver-notas-fiscais')
                     <x-dropdown-link :href="route('nfe.index')">
                         {{ __('Notas Fiscais (NF-e / NFC-e)') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-notas-fiscais')
+                    <x-dropdown-link :href="route('pdv-caixa.index')">
+                        {{ __('PDV - CAIXA') }}
                     </x-dropdown-link>
                 @endcan
                 @can('ver-comissoes')

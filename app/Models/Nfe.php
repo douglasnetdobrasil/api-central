@@ -27,6 +27,7 @@ class Nfe extends Model
         'status',
         'chave_acesso',
         'numero_nfe',
+        'modelo',
         'serie',
         'ambiente',
         'caminho_xml',

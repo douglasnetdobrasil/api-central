@@ -137,7 +137,7 @@ class NFeController extends Controller
             $pagamento = new Pagamento([
                 'valor' => $totalVenda,
             ]);
-            $pagamento->setRelation('forma', $formaPagamento);
+            $pagamento->setRelation('formaPagamento', $formaPagamento);
             $pagamentos->push($pagamento);
             $vendaVirtual->setRelation('pagamentos', $pagamentos);
 
