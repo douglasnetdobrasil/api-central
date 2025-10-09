@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Caixa;
 use App\Models\Cliente;
+use App\Models\Nfe;
+use App\Models\CaixaMovimentacao;
+use App\Models\User;
 
 class PdvCaixa extends Component
 {
@@ -59,7 +62,29 @@ class PdvCaixa extends Component
     public $parametrosDaAcao = null;
     public $pinIncorreto = false;
 
-    protected $listeners = ['resetPdv' => 'resetarPdv'];
+     // NOVAS PROPRIEDADES PARA CANCELAMENTO DE NFCE
+     public $showCancelNfceModal = false;
+     public $justificativaCancelamento = '';
+     public ?Nfe $ultimaNfeAutorizada = null;
+
+      // NOVAS PROPRIEDADES PARA SANGRIA
+    public $showSangriaModal = false;
+    public $valorSangria = '';
+    public $observacaoSangria = '';
+
+      // NOVAS PROPRIEDADES PARA SUPRIMENTO
+      public $showSuprimentoModal = false;
+      public $valorSuprimento = '';
+      public $observacaoSuprimento = '';
+
+     
+
+    // NOVA PROPRIEDADE PARA GUARDAR O SUPERVISOR
+    public ?User $supervisorAutorizado = null;
+
+    
+
+     protected $listeners = ['resetPdv' => 'resetarPdvAutorizado'];
 
     public function mount()
     {
@@ -116,10 +141,16 @@ class PdvCaixa extends Component
 
     public function removerItem($cartKey)
     {
+        $this->solicitarAutorizacao('removerItemAutorizado', $cartKey);
+    }
+
+    public function removerItemAutorizado($cartKey)
+    {
         if (isset($this->cart[$cartKey]) && !$this->vendaFinalizada) {
             unset($this->cart[$cartKey]);
             $this->cart = array_values($this->cart);
             $this->recalcularTotal();
+            $this->dispatch('produto-adicionado'); // Apenas para focar no input
         }
     }
 
@@ -205,18 +236,34 @@ class PdvCaixa extends Component
 
     public function verificarPin()
     {
-        $pinCorreto = '1234';
-        if ($this->supervisorPin === $pinCorreto) {
+        $this->resetErrorBag();
+        $this->pinIncorreto = false;
+
+        if (empty($this->supervisorPin)) {
+            $this->addError('pin', 'O PIN não pode estar em branco.');
+            $this->pinIncorreto = true;
+            return;
+        }
+
+        $supervisor = User::where('pin', $this->supervisorPin)->first();
+
+        if ($supervisor && $supervisor->hasRole('Supervisor')) {
+            // SUCESSO! AGORA VAMOS SALVAR O SUPERVISOR NA PROPRIEDADE
+            $this->supervisorAutorizado = $supervisor;
+            
             $this->showPinModal = false;
-            $this->pinIncorreto = false;
+            
             if (method_exists($this, $this->acaoParaAutorizar)) {
+                // A ação (ex: abrirModalSuprimento) é chamada sem parâmetros extras
                 $this->{$this->acaoParaAutorizar}($this->parametrosDaAcao);
             }
-            $this->reset('acaoParaAutorizar', 'parametrosDaAcao');
+            
+            $this->reset('acaoParaAutorizar', 'parametrosDaAcao', 'supervisorPin');
+
         } else {
             $this->pinIncorreto = true;
             $this->supervisorPin = '';
-            $this->addError('pin', 'PIN incorreto!');
+            $this->addError('pin', 'PIN inválido ou usuário não é um Supervisor.');
         }
     }
 
@@ -294,11 +341,143 @@ class PdvCaixa extends Component
 
     public function resetarPdv()
     {
+        // Se o carrinho estiver vazio, pode resetar sem PIN. Se não, precisa autorizar.
+        if(empty($this->cart)){
+            $this->resetarPdvAutorizado();
+        } else {
+            $this->solicitarAutorizacao('resetarPdvAutorizado');
+        }
+    }
+
+    public function resetarPdvAutorizado()
+    {
         $this->reset();
         $this->mount();
         $this->removerCliente();
         $this->dispatch('pdv-resetado');
     }
+
+    public function abrirModalCancelarNfce()
+    {
+        $this->ultimaNfeAutorizada = Nfe::where('empresa_id', Auth::user()->empresa_id)
+                                        ->where('modelo', '65')
+                                        ->where('status', 'autorizada')
+                                        ->orderBy('created_at', 'desc')
+                                        ->first();
+
+        if ($this->ultimaNfeAutorizada) {
+            $this->showOptionsMenu = false;
+            $this->showCancelNfceModal = true;
+            $this->reset('justificativaCancelamento');
+        } else {
+            // Emite um evento para o front-end mostrar um alerta
+            $this->dispatch('show-toast', ['message' => 'Nenhuma NFC-e autorizada encontrada para cancelar.', 'type' => 'error']);
+        }
+    }
+
+    public function fecharModalCancelarNfce()
+    {
+        $this->showCancelNfceModal = false;
+    }
+
+    public function cancelarUltimaNfce(NFCeService $nfceService)
+    {
+        $this->validate([
+            'justificativaCancelamento' => 'required|min:15|string'
+        ], [
+            'justificativaCancelamento.min' => 'A justificativa deve ter no mínimo 15 caracteres.'
+        ]);
+
+        if ($this->ultimaNfeAutorizada) {
+            $resultado = $nfceService->cancelar($this->ultimaNfeAutorizada, $this->justificativaCancelamento);
+
+            if ($resultado['success']) {
+                $this->dispatch('show-toast', ['message' => $resultado['message'], 'type' => 'success']);
+                $this->fecharModalCancelarNfce();
+            } else {
+                $this->addError('cancelamento_nfce', $resultado['message']);
+            }
+        }
+    }
+
+    public function trocarOperador()
+    {
+        Auth::logout();
+        request()->session()->invalidate();
+        request()->session()->regenerateToken();
+        return redirect()->route('login'); // Certifique-se que sua rota de login tem o nome 'login'
+    }
+
+    public function abrirModalSangria()
+    {
+        $this->reset('valorSangria', 'observacaoSangria');
+        $this->showOptionsMenu = false; // Fecha o menu de opções
+        $this->showSangriaModal = true;
+    }
+
+    public function fecharModalSangria()
+    {
+        $this->showSangriaModal = false;
+        $this->reset('supervisorAutorizado');
+    }
+
+    public function executarSangria() // Removidos os parâmetros ($params = null, User $supervisor = null)
+    {
+        $this->validate(['valorSangria' => 'required|numeric|min:0.01']);
+
+        CaixaMovimentacao::create([
+            'caixa_id' => $this->caixaSessao->id,
+            'user_id' => auth()->id(),
+            'tipo' => 'SANGRIA',
+            'valor' => $this->valorSangria,
+            'observacao' => $this->observacaoSangria,
+        ]);
+        
+        // Usamos a propriedade que guardou o supervisor
+        $nomeSupervisor = $this->supervisorAutorizado ? $this->supervisorAutorizado->name : 'Supervisor';
+        $this->dispatch('show-toast', ['message' => 'Sangria autorizada por ' . $nomeSupervisor . ' e registrada!', 'type' => 'success']);
+        $this->fecharModalSangria();
+    }
+
+    public function abrirModalSuprimento()
+    {
+        $this->reset('valorSuprimento', 'observacaoSuprimento');
+        $this->showOptionsMenu = false; // Fecha o menu de opções
+        $this->showSuprimentoModal = true;
+    }
+
+    public function fecharModalSuprimento()
+    {
+        $this->showSuprimentoModal = false;
+        $this->reset('supervisorAutorizado');
+    }
+
+    public function executarSuprimento() // Removidos os parâmetros
+    {
+        $this->validate([
+            'valorSuprimento' => 'required|numeric|min:0.01'
+        ], [
+            'valorSuprimento.required' => 'O valor é obrigatório.',
+            'valorSuprimento.min' => 'O valor deve ser positivo.'
+        ]);
+
+        try {
+            CaixaMovimentacao::create([
+                'caixa_id' => $this->caixaSessao->id,
+                'user_id' => auth()->id(),
+                'tipo' => 'SUPRIMENTO',
+                'valor' => $this->valorSuprimento,
+                'observacao' => $this->observacaoSuprimento,
+            ]);
+
+            $this->dispatch('show-toast', ['message' => 'Suprimento registrado com sucesso!', 'type' => 'success']);
+            $this->fecharModalSuprimento();
+
+        } catch (\Exception $e) {
+            $this->dispatch('show-toast', ['message' => 'Erro ao registrar o suprimento: ' . $e->getMessage(), 'type' => 'error']);
+        }
+    }
+
 
     public function render()
     {

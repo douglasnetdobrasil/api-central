@@ -28,5 +28,25 @@ class UserSeeder extends Seeder
 
         // Atribui o perfil 'Admin' ao usuário recém-criado
         $adminUser->assignRole($adminRole);
+
+
+         // =======================================================
+        // 2. ADIÇÃO: CRIA O USUÁRIO SUPERVISOR
+        // =======================================================
+        $supervisorUser = User::firstOrCreate(
+            ['email' => 'supervisor@netdobrasil.com'],
+            [
+                'name' => 'Supervisor Caixa',
+                'password' => Hash::make('123456'),
+                'pin' => '1234', // PIN padrão para o supervisor
+                'empresa_id' => 1,
+            ]
+        );
+
+        // Encontra o papel 'Supervisor' que foi criado no PermissionSeeder
+        $supervisorRole = Role::findByName('Supervisor');
+
+        // Atribui o papel 'Supervisor' ao novo usuário
+        $supervisorUser->assignRole($supervisorRole);
     }
-}
+    }

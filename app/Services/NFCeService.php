@@ -160,11 +160,21 @@ class NFCeService
                 $this->buildEmitter($empresa);
                 $this->buildRecipient($venda);
                 $this->buildProducts($venda);
-                $this->buildTotals();
-                $this->buildTransport($venda);
                 $this->buildPayments($venda);
+                $this->buildTransport($venda);
+                $this->buildTotals();
+               
+               
 
                 $xml = $this->nfe->getXML();
+
+              /*    // ============ CÓDIGO DE DEBUG TEMPORÁRIO ============
+            // Salva o XML em um arquivo para podermos inspecionar
+            Storage::disk('local')->put('debug_nfe.xml', $xml);
+            // Interrompe a execução e mostra uma mensagem
+            dd('XML de debug salvo em storage/app/debug_nfe.xml. Abra e verifique este arquivo.');
+            */
+            // =======================================================
                 $errors = $this->nfe->getErrors();
                 if (count($errors) > 0) {
                     throw new \Exception("Erros de validação do XML: " . implode(', ', $errors));
@@ -522,46 +532,44 @@ class NFCeService
     // ==================================================================
     private function buildPayments(Venda $venda)
     {
-        // Inicia o grupo de pagamentos
         $this->nfe->tagpag(new stdClass());
         
-        // Fallback: se não houver pagamentos definidos, assume Dinheiro
         if ($venda->pagamentos->isEmpty()) {
             $det = new stdClass();
-            $det->tPag = '01'; // 01=Dinheiro
+            $det->tPag = '01';
             $det->vPag = number_format($venda->total, 2, '.', '');
             $this->nfe->tagdetPag($det);
-            return; // Finaliza o método aqui
+            return;
         }
     
-        // Processa os pagamentos que existem na venda
         foreach ($venda->pagamentos as $pagamento) {
-            $codigoPagamento = $pagamento->formaPagamento->codigo_sefaz;
+            $codigoPagamento = (string) $pagamento->formaPagamento->codigo_sefaz;
     
-            // 1. Cria o objeto principal do pagamento
+            // ================== ABORDAGEM CORRETA E FINAL ==================
+            
+            // Passo 1: Cria o grupo <detPag> com as informações básicas
             $det = new stdClass();
             $det->tPag = $codigoPagamento;
             $det->vPag = number_format($pagamento->valor, 2, '.', '');
             
-            // Se for "Outros", adiciona a descrição
-            if ($codigoPagamento == '99') {
-                $det->xPag = $pagamento->formaPagamento->nome;
-            }
-            
-            // 2. SE FOR CARTÃO, cria o objeto 'card' e anexa ele ao objeto 'det'
-            if (in_array($codigoPagamento, ['03', '04'])) { // 03=Cartão de Crédito, 04=Cartão de Débito
-                $card = new stdClass();
-                $card->tpIntegra = 2; // 1=Integrado (TEF), 2=Não integrado (POS)
-                $card->CNPJ = '12345678000199';      // CNPJ da credenciadora (para testes)
-                $card->tBand = '99';                  // 99=Outros
-                $card->cAut = 'ABC123456';           // Número da autorização (para testes)
-                
-                // A CORREÇÃO ESTÁ AQUI: O objeto $card é uma propriedade do objeto $det
-                $det->card = $card;
-            }
+            // Passo 2: A função tagdetPag RETORNA o nó XML criado. Nós o salvamos em uma variável.
+            $detPagNode = $this->nfe->tagdetPag($det); 
     
-            // 3. Adiciona o detalhe do pagamento (com o 'card' dentro, se aplicável)
-            $this->nfe->tagdetPag($det);
+            // Passo 3: Se for cartão ou PIX, usamos a variável $detPagNode para adicionar o filho <card>
+            if (in_array($codigoPagamento, ['03', '04', '17'])) { 
+                $dom = $this->nfe->dom;
+
+                $cardNode = $dom->createElement('card');
+                $detPagNode->appendChild($cardNode);
+
+                $cardNode->appendChild($dom->createElement('tpIntegra', '2'));
+               /*
+                $cardNode->appendChild($dom->createElement('CNPJ', ''));
+                $cardNode->appendChild($dom->createElement('tBand', ''));
+                $cardNode->appendChild($dom->createElement('cAut', ''));
+                */
+            }
+            // ====================================================================
         }
     }
 }

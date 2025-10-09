@@ -19,6 +19,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\EstoqueController;
 use App\Http\Controllers\PdvCaixaController;
+use App\Livewire\FechamentoCaixa;
 
 
 use App\Services\NFCeService;
@@ -144,6 +145,9 @@ Route::get('/estoque/{produto}', [EstoqueController::class, 'show'])->name('esto
     Route::get('/pdv-caixa', PdvCaixaController::class)
     ->middleware(['auth', 'can:operar-caixa']) // <-- ADICIONE O 'can:operar-caixa'
     ->name('pdv-caixa.index');
+
+   // Rota para a tela de Fechamento de Caixa
+   Route::get('/pdv/fechamento', FechamentoCaixa::class)->name('pdv.fechamento');
 
 
     Route::get('/teste-status-sefaz', function () {

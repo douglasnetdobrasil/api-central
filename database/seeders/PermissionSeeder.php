@@ -90,5 +90,19 @@ class PermissionSeeder extends Seeder
         $motoboyRole->syncPermissions([
             'ver-pedidos-venda', // Exemplo: motoboy só pode ver os pedidos de venda
         ]);
+
+          // --- Perfil Supervisor ---
+        // Cria o perfil de Supervisor se ele não existir
+        $supervisorRole = Role::firstOrCreate(['name' => 'Supervisor']);
+        
+        // Define as permissões essenciais para um supervisor de caixa
+        $supervisorPermissions = [
+            'operar-caixa',
+            'cancelar-vendas',
+            'ver-relatorio-vendas',
+        ];
+
+        // Atribui as permissões ao Supervisor
+        $supervisorRole->syncPermissions($supervisorPermissions);
     }
 }

@@ -33,6 +33,11 @@ class Caixa extends Model
         'data_fechamento',
     ];
 
+    protected $casts = [
+        'data_abertura' => 'datetime',
+        'data_fechamento' => 'datetime',
+    ];
+
     /**
      * Define a relação: Uma sessão de Caixa PERTENCE A um Usuário.
      */
