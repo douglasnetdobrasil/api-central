@@ -75,7 +75,7 @@ class NFeService
     
     public function emitirDeVendas(array $vendaIds): array
     {
-        $vendas = Venda::with('cliente', 'items.produto.dadosFiscais', 'pagamentos.forma', 'empresa')->whereIn('id', $vendaIds)->get();
+        $vendas = Venda::with('cliente', 'items.produto.dadosFiscais', 'pagamentos.formaPagamento', 'empresa')->whereIn('id', $vendaIds)->get();
         if ($vendas->isEmpty()) return ['success' => false, 'message' => 'Nenhuma venda encontrada.'];
 
         $empresa = $vendas->first()->empresa;

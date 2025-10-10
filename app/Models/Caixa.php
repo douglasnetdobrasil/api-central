@@ -26,6 +26,7 @@ class Caixa extends Model
     protected $fillable = [
         'empresa_id',
         'user_id',
+        'terminal_id',
         'status',
         'valor_abertura',
         'valor_fechamento',
@@ -53,12 +54,13 @@ class Caixa extends Model
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
     }
+    public function vendas()
+{
+    return $this->hasMany(Venda::class);
+}
 
     /**
      * Define a relação: Uma sessão de Caixa TEM MUITAS Vendas.
      */
-    public function vendas(): HasMany
-    {
-        return $this->hasMany(Venda::class, 'caixa_id');
-    }
+    
 }

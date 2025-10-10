@@ -20,8 +20,8 @@ class VendaPagamento extends Model
     ];
 
     // Relacionamento para buscar os detalhes da forma de pagamento
-    public function formaPagamento(): BelongsTo
+    public function formaPagamento()
     {
-        return $this->belongsTo(FormaPagamento::class, 'forma_pagamento_id');
+        return $this->belongsTo(FormaPagamento::class);
     }
 }

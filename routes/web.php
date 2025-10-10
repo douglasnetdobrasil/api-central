@@ -1,4 +1,5 @@
 <?php
+//dd('ESTE É O ARQUÊVO CORRETO SENDO LIDO');
 
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +21,9 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\EstoqueController;
 use App\Http\Controllers\PdvCaixaController;
 use App\Livewire\FechamentoCaixa;
+use App\Http\Livewire\Fiscal\ContingenciaMonitor;
+use App\Http\Controllers\Fiscal\ContingenciaController;
+use App\Http\Controllers\VendaController; 
 
 
 use App\Services\NFCeService;
@@ -89,6 +93,13 @@ Route::get('/estoque/{produto}', [EstoqueController::class, 'show'])->name('esto
     Route::post('/pedidos/{venda}/emitir-nfe', [NFeController::class, 'emitir'])->name('pedidos.emitirNFe');
     Route::resource('contas_a_pagar', App\Http\Controllers\ContaAPagarController::class);
     Route::resource('contas_a_receber', App\Http\Controllers\ContaAReceberController::class); 
+
+    // NOVA ROTA para a tela principal de listagem de vendas
+Route::get('/vendas', [VendaController::class, 'index'])->name('vendas.index');
+
+    // NOVA ROTA para a tela de detalhes da venda
+Route::get('/vendas/{venda}', [VendaController::class, 'show'])->name('vendas.show');
+
     // NFe (Original - MANTIDO)
     Route::prefix('nfe')->name('nfe.')->group(function () {
         Route::get('/', [NFeController::class, 'index'])->name('index');
@@ -191,7 +202,15 @@ Route::get('/estoque/{produto}', [EstoqueController::class, 'show'])->name('esto
         }
     });
 
-
+    /*
+    Route::get('/fiscal/contingencia', ContingenciaMonitor::class)
+    ->middleware('auth')
+    ->name('fiscal.contingencia.index');
+    */
+    
+    Route::get('/fiscal', [ContingenciaController::class, 'index'])
+    ->middleware('auth')
+    ->name('fiscal.index');
     
 
     // Rota de teste (Original - MANTIDO)

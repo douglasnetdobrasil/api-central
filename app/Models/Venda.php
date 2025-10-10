@@ -16,6 +16,7 @@ class Venda extends Model
 
     protected $fillable = [
         'empresa_id',
+        'caixa_id',
         'user_id',
         'cliente_id',
         'orcamento_id',
@@ -48,6 +49,17 @@ class Venda extends Model
     {
         return $this->belongsTo(Cliente::class);
     }
+
+    public function nfes()
+{
+    return $this->hasMany(\App\Models\Nfe::class);
+}
+
+public function movimentosEstoque()
+{
+    // Assumindo que você tem uma relação polimórfica 'origem' no seu model EstoqueMovimento
+    return $this->morphMany(\App\Models\EstoqueMovimento::class, 'origem');
+}
 
     /**
      * Uma Venda TEM MUITOS Itens.

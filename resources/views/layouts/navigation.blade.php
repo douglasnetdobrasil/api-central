@@ -126,9 +126,20 @@
                         {{ __('PDV - CAIXA') }}
                     </x-dropdown-link>
                 @endcan
+
+                @can('ver-notas-fiscais')
+                    <x-dropdown-link :href="route('fiscal.index')">
+                        {{ __('NOTAS - CONTIGENCIA') }}
+                    </x-dropdown-link>
+                @endcan
                 @can('ver-comissoes')
                     <x-dropdown-link :href="route('compras.index')">
                         {{ __('Comissões') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-comissoes')
+                    <x-dropdown-link :href="route('vendas.index')">
+                        {{ __('Conferencia de Vendas') }}
                     </x-dropdown-link>
                 @endcan
             </x-slot>

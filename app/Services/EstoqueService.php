@@ -22,21 +22,34 @@ class EstoqueService
      */
     public static function registrarMovimento(Produto $produto, string $tipoMovimento, float $quantidade, Model $origem, ?string $observacao = null): void
     {
-        DB::transaction(function () use ($produto, $tipoMovimento, $quantidade, $origem, $observacao) {
+        // Usamos o ID do produto para buscá-lo novamente dentro da transação
+        $produtoId = $produto->id;
+    
+        DB::transaction(function () use ($produtoId, $tipoMovimento, $quantidade, $origem, $observacao) {
             
-            $saldoAnterior = $produto->estoque_atual;
+            // ================== ESTA É A PARTE MAIS IMPORTANTE ==================
+            // 1. Busca novamente o produto DENTRO da transação e o "tranca" para atualização.
+            // Isso garante que estamos trabalhando com os dados mais recentes e evita erros de concorrência.
+            $produtoNaTransacao = Produto::where('id', $produtoId)->lockForUpdate()->first();
+    
+            if (!$produtoNaTransacao) {
+                // Se o produto não for encontrado por algum motivo, interrompe a transação.
+                return;
+            }
+    
+            $saldoAnterior = $produtoNaTransacao->estoque_atual;
             $saldoNovo = $saldoAnterior;
-
+    
             // Determina se é entrada ou saída pelo nome do tipo
             if (str_starts_with($tipoMovimento, 'entrada') || str_starts_with($tipoMovimento, 'ajuste_positivo')) {
                 $saldoNovo += $quantidade;
             } elseif (str_starts_with($tipoMovimento, 'saida') || str_starts_with($tipoMovimento, 'estorno') || str_starts_with($tipoMovimento, 'ajuste_negativo')) {
                 $saldoNovo -= $quantidade;
             }
-
+    
             EstoqueMovimento::create([
-                'empresa_id' => Auth::user()->empresa_id,
-                'produto_id' => $produto->id,
+                'empresa_id' => $produtoNaTransacao->empresa_id,
+                'produto_id' => $produtoNaTransacao->id,
                 'user_id' => Auth::id(),
                 'tipo_movimento' => $tipoMovimento,
                 'quantidade' => $quantidade,
@@ -47,8 +60,14 @@ class EstoqueService
                 'observacao' => $observacao,
             ]);
 
-            $produto->estoque_atual = $saldoNovo;
-            $produto->save();
+            DB::table('produtos')->where('id', $produtoId)->update([
+                'estoque_atual' => $saldoNovo
+            ]);
+            /*
+            // 2. Atualiza e salva o objeto do produto que foi buscado DENTRO da transação.
+            $produtoNaTransacao->estoque_atual = $saldoNovo;
+            $produtoNaTransacao->save();
+            */
         });
     }
 }

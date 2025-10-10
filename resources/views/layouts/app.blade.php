@@ -34,5 +34,17 @@
             </main>
         </div>
         @livewireScripts
+
+        <div 
+    x-data="{ show: false, message: '', type: 'success' }" 
+    @show-toast.window="message = $event.detail.message; type = $event.detail.type || 'success'; show = true; setTimeout(() => show = false, 3000)"
+    x-show="show" 
+    x-transition
+    class="fixed bottom-5 right-5 z-50 px-4 py-2 rounded-md text-white font-semibold"
+    :class="{ 'bg-green-500': type === 'success', 'bg-red-500': type === 'error' }"
+    style="display: none;"
+>
+    <span x-text="message"></span>
+</div>
     </body>
 </html>

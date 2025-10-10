@@ -14,11 +14,17 @@ use App\Models\Cliente;
 use App\Models\Nfe;
 use App\Models\CaixaMovimentacao;
 use App\Models\User;
+use App\Models\Terminal;
+use App\Services\EstoqueService; // <-- ADICIONE ESTA LINHA
+use App\Models\EstoqueMovimento; // <-- ADICIONE ESTA LINHA (para compatibilidade)
+ 
+
 
 class PdvCaixa extends Component
 {
     public ?Caixa $caixaSessao = null;
     public $valorAbertura;
+    public $terminalId; 
     
     // Itens e totais da venda
     public $cart = [];
@@ -77,10 +83,22 @@ class PdvCaixa extends Component
       public $valorSuprimento = '';
       public $observacaoSuprimento = '';
 
+       // NOVAS PROPRIEDADES PARA CONTROLE DA UI DE CONTINGÊNCIA
+    public $modoContingencia = false;
+    public $mensagemContingencia = '';
+
      
 
     // NOVA PROPRIEDADE PARA GUARDAR O SUPERVISOR
     public ?User $supervisorAutorizado = null;
+
+    public $notasPendentesCount = 0;
+
+
+    // ADICIONE ESTAS 3 LINHAS ABAIXO
+public $showProductSearchModal = false;
+public $productSearchQuery = '';
+public $productSearchResults = [];
 
     
 
@@ -105,25 +123,47 @@ class PdvCaixa extends Component
 
     public function abrirCaixa()
     {
-        $this->validate(['valorAbertura' => 'required|numeric|min:0']);
+        // Adiciona a validação para o terminal_id
+        $this->validate([
+            'valorAbertura' => 'required|numeric|min:0',
+            'terminalId' => 'required|exists:terminais,id'
+        ], [
+            'terminalId.required' => 'É obrigatório selecionar o terminal.'
+        ]);
+    
         $this->caixaSessao = Caixa::create([
             'empresa_id' => Auth::user()->empresa_id,
             'user_id' => Auth::id(),
+            'terminal_id' => $this->terminalId, // SALVANDO O ID DO TERMINAL
             'valor_abertura' => $this->valorAbertura,
             'status' => 'aberto',
         ]);
-        $this->reset('valorAbertura');
+        $this->reset('valorAbertura', 'terminalId');
         $this->mount();
     }
 
-    public function addProduto()
+    public function addProduto($produtoId = null)
     {
-        $this->reset('mensagemErro');
         if ($this->vendaFinalizada) return;
-        if (empty($this->barcode)) return;
-
-        $produto = Produto::where('codigo_barras', $this->barcode)->where('empresa_id', Auth::user()->empresa_id)->first();
-
+    
+        $produto = null;
+    
+        // 1. Se um ID foi passado (clique no modal de busca), busca pelo ID
+        if ($produtoId) {
+            $produto = Produto::find($produtoId);
+        } 
+        // 2. Se não, e se algo foi digitado no campo principal...
+        elseif (!empty($this->barcode)) {
+            // ...procura tanto pelo CÓDIGO DE BARRAS quanto pelo ID do produto
+            $produto = Produto::where('empresa_id', Auth::user()->empresa_id)
+                              ->where(function($query) {
+                                  $query->where('codigo_barras', $this->barcode)
+                                        ->orWhere('id', $this->barcode);
+                              })
+                              ->first();
+        }
+    
+        // A lógica para adicionar ao carrinho continua a mesma
         if ($produto) {
             $cartKey = collect($this->cart)->search(fn($item) => $item['id'] === $produto->id);
             if ($cartKey !== false) {
@@ -134,8 +174,10 @@ class PdvCaixa extends Component
             $this->recalcularTotal();
             $this->reset('barcode', 'quantidade');
             $this->dispatch('produto-adicionado');
+            $this->fecharModalBuscaProduto(); // Fecha o modal se a adição veio de lá
         } else {
-            $this->mensagemErro = 'Produto não encontrado.';
+            $this->dispatch('show-toast', ['message' => 'Produto não encontrado.', 'type' => 'error']);
+            $this->reset('barcode');
         }
     }
 
@@ -201,7 +243,7 @@ class PdvCaixa extends Component
             $this->showIdentificarModal = false; 
             $this->showOptionsMenu = false;      
         } else {
-            $this->addError('finalizacao', 'Cliente não encontrado com este CPF/CNPJ.');
+            $this->dispatch('show-toast', ['message' => 'Cliente não encontrado com este CPF/CNPJ.', 'type' => 'error']);
             $this->documentoCliente = '';
         }
     }
@@ -299,7 +341,7 @@ class PdvCaixa extends Component
     {
         if (!$this->caixaSessao) { $this->addError('finalizacao', 'Nenhum caixa aberto.'); return; }
         $this->resetErrorBag();
-
+    
         DB::beginTransaction();
         try {
             $venda = Venda::create([
@@ -312,20 +354,69 @@ class PdvCaixa extends Component
                 'total' => $this->total,
                 'status' => 'concluida',
             ]);
-
+    
             foreach ($this->cart as $item) {
-                $venda->items()->create(['produto_id' => $item['id'], 'descricao_produto' => $item['nome'], 'quantidade' => $item['qtd'], 'preco_unitario' => $item['preco'], 'subtotal_item' => $item['preco'] * $item['qtd']]);
+                $venda->items()->create([
+                    'produto_id' => $item['id'],
+                    'descricao_produto' => $item['nome'],
+                    'quantidade' => $item['qtd'],
+                    'preco_unitario' => $item['preco'],
+                    'subtotal_item' => $item['preco'] * $item['qtd']
+                ]);
+    
+                // ====================================================================
+                // |||||||||||||| LÓGICA DE ESTOQUE CORRETA APLICADA ||||||||||||||
+                // ====================================================================
+                $produto = Produto::find($item['id']);
+                if ($produto) {
+                    $saldoAnterior = $produto->estoque_atual;
+                    
+                    // 1. DÁ A BAIXA NO ESTOQUE DO PRODUTO
+                    $produto->decrement('estoque_atual', $item['qtd']);
+                    
+                    // 2. RECARREGA O PRODUTO PARA PEGAR O NOVO SALDO REAL
+                    $saldoNovo = $produto->fresh()->estoque_atual;
+    
+                    // 3. REGISTRA A MOVIMENTAÇÃO
+                    DB::table('estoque_movimentos')->insert([
+                        'empresa_id' => auth()->user()->empresa_id,
+                        'produto_id' => $produto->id,
+                        'user_id' => auth()->id(),
+                        'tipo_movimento' => 'Caixa_saida_pdv', // Usando o tipo específico do PDV de Caixa
+                        'quantidade' => $item['qtd'],
+                        'saldo_anterior' => $saldoAnterior,
+                        'saldo_novo' => $saldoNovo,
+                        'origem_id' => $venda->id,
+                        'origem_type' => Venda::class,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+                // ====================================================================
             }
-            
+    
             foreach ($this->pagamentos as $pagamento) {
-                $venda->pagamentos()->create(['empresa_id' => Auth::user()->empresa_id, 'forma_pagamento_id' => $pagamento['forma_pagamento_id'], 'valor' => $pagamento['valor']]);
+                $venda->pagamentos()->create([
+                    'empresa_id' => Auth::user()->empresa_id,
+                    'forma_pagamento_id' => $pagamento['forma_pagamento_id'],
+                    'valor' => $pagamento['valor']
+                ]);
             }
-
+    
             $venda->load('items.produto.dadosFiscais', 'empresa', 'cliente', 'pagamentos.formaPagamento');
+    
             $resultado = $nfceService->emitir($venda);
-
+    
             if ($resultado['success']) {
                 $venda->update(['nfe_chave_acesso' => $resultado['chave']]);
+    
+                if (isset($resultado['mode']) && $resultado['mode'] === 'contingencia') {
+                    $this->modoContingencia = true;
+                    $this->mensagemContingencia = 'ATENÇÃO: Operando em CONTINGÊNCIA. A nota será enviada à SEFAZ automaticamente depois.';
+                } else {
+                    $this->modoContingencia = false;
+                }
+    
                 DB::commit();
                 $this->vendaFinalizada = true;
                 $this->dadosUltimaNfce = $resultado;
@@ -354,8 +445,10 @@ class PdvCaixa extends Component
         $this->reset();
         $this->mount();
         $this->removerCliente();
+        $this->modoContingencia = false; // Limpa o status ao iniciar nova venda
         $this->dispatch('pdv-resetado');
     }
+
 
     public function abrirModalCancelarNfce()
     {
@@ -478,9 +571,74 @@ class PdvCaixa extends Component
         }
     }
 
+    public function abrirModalBuscaProduto()
+    {
+        $this->reset('productSearchQuery', 'productSearchResults');
+        $this->showProductSearchModal = true;
+        $this->dispatch('focus-search-input');
+    }
+
+    public function fecharModalBuscaProduto()
+    {
+        $this->showProductSearchModal = false;
+    }
+
+    public function updatedProductSearchQuery($query)
+    {
+        if (strlen($query) >= 2) {
+            $this->productSearchResults = Produto::where('empresa_id', Auth::user()->empresa_id)
+                ->where(function($q) use ($query) {
+                    $q->where('nome', 'like', "%{$query}%")
+                      ->orWhere('id', $query); // Busca também pelo código interno (ID)
+                })
+                ->where('ativo', true)
+                ->limit(10)
+                ->get();
+        } else {
+            $this->productSearchResults = [];
+        }
+    }
+
+    public function updatedCart($value, $key)
+    {
+        $parts = explode('.', $key); // Ex: '2.qtd' se torna ['2', 'qtd']
+        $cartIndex = $parts[0];
+        $property = $parts[1];
+
+        if ($property === 'qtd') {
+            $this->cart[$cartIndex]['qtd'] = max(1, (int)$value); // Garante que a qtd seja no mínimo 1
+            $this->recalcularTotal();
+        }
+    }
+
+    public function novaVenda()
+{
+    // Apenas chama a função que já reseta tudo
+    $this->resetarPdvAutorizado();
+}
+
 
     public function render()
     {
-        return view('livewire.pdv-caixa');
+        // CONTA AS NOTAS PENDENTES DE CONTINGÊNCIA
+        $this->notasPendentesCount = Nfe::where('empresa_id', Auth::user()->empresa_id)
+                                        ->where('status', 'contingencia_pendente')
+                                        ->count();
+    
+        // Lógica que você já tinha para buscar os terminais
+        $terminaisDisponiveis = [];
+        if (!$this->caixaSessao) {
+            $terminaisOcupados = Caixa::where('status', 'aberto')
+                ->where('empresa_id', Auth::user()->empresa_id)
+                ->pluck('terminal_id');
+    
+            $terminaisDisponiveis = Terminal::where('empresa_id', Auth::user()->empresa_id)
+                ->whereNotIn('id', $terminaisOcupados)
+                ->get();
+        }
+    
+        return view('livewire.pdv-caixa', [
+            'terminaisDisponiveis' => $terminaisDisponiveis
+        ]);
     }
 }

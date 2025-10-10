@@ -14,6 +14,7 @@ use App\Models\Empresa;
 use NFePHP\NFe\Complements;
 use NFePHP\DA\Common\DaEvento;
 use App\Models\Nfe;
+use Illuminate\Support\Facades\Log;
 use NFePHP\DA\Cce;
 use NFePHP\NFe\Events;
 use NFePHP\NFe\Evento;
@@ -21,6 +22,7 @@ use App\Models\Venda;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Services\RegraTributariaService;
+use Illuminate\Support\Facades\URL;
 use stdClass;
 
 class NFCeService
@@ -62,7 +64,7 @@ class NFCeService
             'CSCid'       => $empresa->csc_id_nfe,
             'debugMode'   => true,
             'pathLogs'    => $logDir,
-           // 'forceSoap'   => 1, // <-- ADIÇÃO PARA FORÇAR O USO DO SoapClient DO PHP
+            'forceSoap'   => 1, // <-- ADIÇÃO PARA FORÇAR O USO DO SoapClient DO PHP
         ];
 
         $this->configArray = $config; 
@@ -128,26 +130,49 @@ class NFCeService
     // ==================================================================
     public function emitir(Venda $venda)
     {
-        $empresa = $venda->empresa;
-        $vendaIdsOriginais = [$venda->id]; 
+        try {
+            // Tenta a emissão normal (Síncrona)
+            return $this->tentarEmissaoNormal($venda);
+        } catch (\Exception $e) {
+            // Verifica se a falha foi de comunicação para entrar em contingência
+            $isConnectionError = str_contains($e->getMessage(), 'SOAP') || // <- Mais genérico
+            str_contains($e->getMessage(), 'cURL error') ||
+            str_contains($e->getMessage(), 'Could not resolve host') ||
+            str_contains($e->getMessage(), 'comunicação') || // <- Adicionado a partir do seu teste
+            str_contains($e->getMessage(), 'timeout');
+            if ($isConnectionError) {
+                Log::warning('Falha de comunicação com a SEFAZ. Entrando em modo de contingência. Erro: ' . $e->getMessage());
+                // Se a emissão normal falhou por conexão, tenta emitir em contingência
+                try {
+                    return $this->emitirEmContingencia($venda, 'Falha de comunicacao com a SEFAZ.');
+                } catch (\Exception $contingencyException) {
+                    // Se até a contingência falhar, retorna o erro da contingência
+                    return ['success' => false, 'message' => 'Falha crítica ao tentar emitir em contingência: ' . $contingencyException->getMessage()];
+                }
+            }
 
+            // Se for outro tipo de erro (ex: validação de XML), retorna o erro original
+            return ['success' => false, 'message' => 'Erro de emissão: ' . $e->getMessage()];
+        }
+    }
+
+
+    private function tentarEmissaoNormal(Venda $venda)
+    {
+        // Esta função usa o loop de retentativa que você já tinha.
         for ($i = 0; $i < 5; $i++) {
-            // ================== A CORREÇÃO ESTÁ AQUI ==================
-            // Garante que um novo objeto de montagem de XML seja criado a cada tentativa
             $this->nfe = new Make();
-            // ==========================================================
-            
-            DB::beginTransaction(); 
+            DB::beginTransaction();
             try {
-                $this->bootstrap($empresa);
+                $this->bootstrap($venda->empresa);
 
                 $serie = 1; 
                 $modelo = '65';
-                $numero = $this->getProximoNumero($empresa, $serie, $modelo);
+                $numero = $this->getProximoNumero($venda->empresa, $serie, $modelo);
 
                 $nfeRecord = Nfe::create([
-                    'empresa_id' => $empresa->id,
-                    'venda_id' => $vendaIdsOriginais[0],
+                    'empresa_id' => $venda->empresa->id,
+                    'venda_id' => $venda->id,
                     'status' => 'processando',
                     'ambiente' => $this->configArray['tpAmb'],
                     'serie' => $serie,
@@ -155,34 +180,23 @@ class NFCeService
                     'numero_nfe' => $numero,
                 ]);
 
-                // ... (o resto da função permanece igual)
-                $this->buildHeader($empresa, $venda, $numero, $serie);
-                $this->buildEmitter($empresa);
+                // Monta o XML com tpEmis = 1 (Normal)
+                $this->buildHeader($venda->empresa, $venda, $numero, $serie, 1);
+                $this->buildEmitter($venda->empresa);
                 $this->buildRecipient($venda);
                 $this->buildProducts($venda);
                 $this->buildPayments($venda);
                 $this->buildTransport($venda);
                 $this->buildTotals();
-               
-               
 
                 $xml = $this->nfe->getXML();
-
-              /*    // ============ CÓDIGO DE DEBUG TEMPORÁRIO ============
-            // Salva o XML em um arquivo para podermos inspecionar
-            Storage::disk('local')->put('debug_nfe.xml', $xml);
-            // Interrompe a execução e mostra uma mensagem
-            dd('XML de debug salvo em storage/app/debug_nfe.xml. Abra e verifique este arquivo.');
-            */
-            // =======================================================
                 $errors = $this->nfe->getErrors();
-                if (count($errors) > 0) {
-                    throw new \Exception("Erros de validação do XML: " . implode(', ', $errors));
-                }
+                if (count($errors) > 0) throw new \Exception("Erros de validação do XML: " . implode(', ', $errors));
 
                 $chave = $this->nfe->getChave();
-                $xmlAssinado = $this->tools->signNFe($xml);
+                $nfeRecord->update(['chave_acesso' => $chave]); // Salva a chave antes de enviar
                 
+                $xmlAssinado = $this->tools->signNFe($xml);
                 
                 $protocolo = $this->tools->sefazEnviaLote([$xmlAssinado], $nfeRecord->id, 1);
                 
@@ -193,27 +207,86 @@ class NFCeService
                 
                 if (in_array($cStat, ['100', '150'])) {
                     $this->handleSuccess($protocolo, $xmlAssinado, $nfeRecord, $chave);
-                    Venda::whereIn('id', $vendaIdsOriginais)->update(['nfe_chave_acesso' => $chave]);
+                    $venda->update(['nfe_chave_acesso' => $chave]);
                     DB::commit();
-                    return ['success' => true, 'message' => "NFC-e #{$nfeRecord->numero_nfe} autorizada!", 'chave' => $chave];
+                    // Agora esta linha está correta, incluindo a danfeUrl
+                    return ['success' => true, 'mode' => 'online', 'message' => "NFC-e #{$nfeRecord->numero_nfe} autorizada!", 'chave' => $chave, 'danfeUrl' => $nfeRecord->danfeUrl];
                 } else {
                     throw new \Exception("[{$cStat}] {$xMotivo}");
                 }
 
             } catch (\Exception $e) {
                 DB::rollBack();
-
-                
-
-                if (str_contains($e->getMessage(), '[539]')) {
+                if (str_contains($e->getMessage(), '[539]')) { // Rejeição: Duplicidade de NF-e
                     sleep(1);
                     continue;
                 }
-                
-                return ['success' => false, 'message' => $e->getMessage()];
+                throw $e; // Propaga a exceção para ser tratada pelo método 'emitir'
             }
         }
-        return ['success' => false, 'message' => 'Falha ao emitir a nota após múltiplas tentativas de duplicidade.'];
+        return ['success' => true, 'mode' => 'online', 'message' => "NFC-e #{$nfeRecord->numero_nfe} autorizada!", 'chave' => $chave, 'danfeUrl' => $nfeRecord->danfeUrl];
+    }
+
+    private function emitirEmContingencia(Venda $venda, string $justificativa)
+    {
+        DB::beginTransaction();
+        try {
+            $this->nfe = new Make();
+            $empresa = $venda->empresa;
+            $this->bootstrap($empresa);
+
+            $serie = 1; 
+            $modelo = '65';
+            $numero = $this->getProximoNumero($empresa, $serie, $modelo);
+
+            // Monta o XML com tpEmis = 9 (Contingência Offline)
+            $this->buildHeader($empresa, $venda, $numero, $serie, 9, $justificativa);
+            $this->buildEmitter($empresa);
+            $this->buildRecipient($venda);
+            $this->buildProducts($venda);
+            $this->buildPayments($venda);
+            $this->buildTransport($venda);
+            $this->buildTotals();
+            
+            $xml = $this->nfe->getXML();
+            $errors = $this->nfe->getErrors();
+            if (count($errors) > 0) throw new \Exception("Erros de validação do XML: " . implode(', ', $errors));
+            
+            $chave = $this->nfe->getChave();
+            $xmlAssinado = $this->tools->signNFe($xml);
+
+            $anoMes = date('Y-m');
+            $pathXml = "nfe/xml/{$anoMes}/{$chave}.xml";
+            Storage::disk('private')->put($pathXml, $xmlAssinado);
+
+            $danfe = new Danfce($xmlAssinado);
+            $pdf = $danfe->render();
+            $pathDanfe = "nfe/danfe/{$anoMes}/{$chave}.pdf";
+            Storage::disk('private')->put($pathDanfe, $pdf);
+
+            $nfeRecord = Nfe::create([
+                'empresa_id' => $empresa->id,
+                'venda_id' => $venda->id,
+                'status' => 'contingencia_pendente',
+                'ambiente' => $this->configArray['tpAmb'],
+                'serie' => $serie,
+                'modelo' => $modelo,
+                'numero_nfe' => $numero,
+                'chave_acesso' => $chave,
+                'caminho_xml' => $pathXml,
+                'caminho_danfe' => $pathDanfe,
+                'justificativa_contingencia' => $justificativa
+            ]);
+
+            $venda->update(['nfe_chave_acesso' => $chave]);
+            DB::commit();
+             
+            $danfeUrl = URL::temporarySignedRoute('nfe.danfe', now()->addMinutes(5), ['nfe' => $nfeRecord->id]);
+            return ['success' => true, 'mode' => 'contingencia', 'message' => "Venda salva em contingência!", 'chave' => $chave, 'danfeUrl' => $danfeUrl];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
     }
 
     public function cartaCorrecao(Nfe $nfe, string $correcao): array
@@ -292,6 +365,8 @@ class NFCeService
             'caminho_xml' => $pathXml,
             'caminho_danfe' => $pathDanfe,
         ]);
+
+        $nfeRecord->danfeUrl = URL::temporarySignedRoute('nfe.danfe', now()->addMinutes(5), ['nfe' => $nfeRecord->id]);
     }
 
     // ==================================================================
@@ -316,9 +391,8 @@ class NFCeService
         return (int)$numeroInicial;
     }
 
-    private function buildHeader(Empresa $empresa, Venda $venda, int $numero, int $serie)
+    private function buildHeader(Empresa $empresa, Venda $venda, int $numero, int $serie, int $tpEmis = 1, string $justificativa = null)
     {
-        // Sua função original - Mantida com as correções para NFCe
         $std_infNFe = new stdClass();
         $std_infNFe->versao = '4.00';
         $this->nfe->taginfNFe($std_infNFe);
@@ -334,11 +408,18 @@ class NFCeService
         $std_ide->idDest = 1;
         $std_ide->cMunFG = $empresa->codigo_municipio;
         $std_ide->tpImp = 4;
-        $std_ide->tpEmis = 1;
+        $std_ide->tpEmis = $tpEmis; // Usando o parâmetro
         $std_ide->tpAmb = $this->configArray['tpAmb'];
         $std_ide->finNFe = 1;
         $std_ide->indFinal = 1;
         $std_ide->indPres = 1;
+
+        // Se estiver em contingência, adiciona as tags obrigatórias
+        if ($tpEmis == 9) {
+            $std_ide->dhCont = date("Y-m-d\TH:i:sP"); // Data e hora da entrada em contingência
+            $std_ide->xJust = $justificativa;         // Justificativa
+        }
+
         $std_ide->procEmi = 0;
         $std_ide->verProc = 'Sistema ERP 1.0';
         $this->nfe->tagide($std_ide);
@@ -493,6 +574,51 @@ class NFCeService
         $std = new stdClass();
         $std->modFrete = 9;
         $this->nfe->tagtransp($std);
+    }
+
+
+    public function enviarNotasEmContingencia()
+    {
+        $notasPendentes = Nfe::where('status', 'contingencia_pendente')->get();
+
+        if ($notasPendentes->isEmpty()) {
+            return ['success' => true, 'message' => 'Nenhuma NFC-e pendente de contingência.'];
+        }
+
+        foreach ($notasPendentes as $nfeRecord) {
+            try {
+                $this->bootstrap($nfeRecord->empresa);
+                
+                $statusServico = $this->tools->sefazStatus();
+                $st = new Standardize($statusServico);
+                $std = $st->toStd();
+                if ($std->cStat != '107') {
+                    Log::info("SEFAZ ainda fora do ar ({$std->xMotivo}). Pulando envio da chave: {$nfeRecord->chave_acesso}");
+                    continue; 
+                }
+
+                $xmlAssinado = Storage::disk('private')->get($nfeRecord->caminho_xml);
+                $protocolo = $this->tools->sefazEnviaLote([$xmlAssinado], $nfeRecord->id, 1);
+                
+                $stProt = new Standardize($protocolo);
+                $stdProt = $stProt->toStd();
+                $cStat = $stdProt->protNFe->infProt->cStat ?? $stdProt->cStat ?? null;
+
+                if (in_array($cStat, ['100', '150'])) {
+                    $this->handleSuccess($protocolo, $xmlAssinado, $nfeRecord, $nfeRecord->chave_acesso);
+                    Log::info("NFC-e em contingência autorizada com sucesso: {$nfeRecord->chave_acesso}");
+                } else {
+                    $xMotivo = $stdProt->protNFe->infProt->xMotivo ?? $stdProt->xMotivo ?? 'Motivo não especificado.';
+                    $nfeRecord->update(['status' => 'erro', 'motivo_rejeicao' => "[{$cStat}] {$xMotivo}"]);
+                    Log::error("Rejeição ao enviar NFC-e em contingência: {$nfeRecord->chave_acesso} - Motivo: {$xMotivo}");
+                }
+            } catch (\Exception $e) {
+                Log::error("Erro crítico ao enviar NFC-e em contingência (Chave: {$nfeRecord->chave_acesso}): " . $e->getMessage());
+                continue;
+            }
+        }
+        
+        return ['success' => true, 'message' => 'Processo de envio em contingência finalizado.'];
     }
 
     public function cancelar(Nfe $nfe, string $justificativa): array

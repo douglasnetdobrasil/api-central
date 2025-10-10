@@ -91,7 +91,7 @@ class NfeAvulsaFormulario extends Component
         // Carrega os pagamentos salvos no rascunho
         $this->pagamentos = [];
         foreach($this->venda->pagamentos as $p) {
-            $this->pagamentos[] = ['id' => $p->forma_pagamento_id, 'nome' => $p->forma->nome, 'valor' => $p->valor];
+            $this->pagamentos[] = ['id' => $p->forma_pagamento_id, 'nome' => $p->formapagamento->nome, 'valor' => $p->valor];
         }
         // >>>>>>>>>>>>>>>>>>>>>>>>> FIM DA ALTERAÇÃO <<<<<<<<<<<<<<<<<<<<<<<<<<
 
