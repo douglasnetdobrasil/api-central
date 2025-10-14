@@ -84,6 +84,8 @@ class Compra extends Model
     return $this->hasMany(\App\Models\ContaAPagar::class);
 }
 
+
+
     protected static function booted(): void
     {
         static::addGlobalScope(new EmpresaScope);

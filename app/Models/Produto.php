@@ -23,6 +23,7 @@ class Produto extends Model
         'codigo_barras',
         'ativo',
         'detalhe_id',
+        'tipo',
         'margem_lucro',
         'estoque_atual',
         'detalhe_type', // <-- ESTA É A LINHA CRUCIAL QUE FALTAVA
@@ -67,6 +68,17 @@ class Produto extends Model
     public function categoria()
     {
         return $this->belongsTo(Categoria::class);
+    }
+
+    public function fichaTecnica(): HasMany
+    {
+        // A chave estrangeira na tabela 'ficha_tecnica_producao' é 'produto_acabado_id'
+        return $this->hasMany(FichaTecnicaProducao::class, 'produto_acabado_id');
+    }
+
+    public function ordensProducao(): HasMany
+    {
+        return $this->hasMany(OrdemProducao::class, 'produto_acabado_id');
     }
 
   //  protected static function booted(): void
@@ -118,7 +130,15 @@ class Produto extends Model
     {
         return $this->hasMany(EstoqueMovimento::class);
     }
+    public function movimentosEstoque()
+    {
+        return $this->hasMany(\App\Models\EstoqueMovimento::class);
+    }
 
+    public function setor(): BelongsTo
+{
+    return $this->belongsTo(Setor::class);
+}
     
 
     public function cotacoes()

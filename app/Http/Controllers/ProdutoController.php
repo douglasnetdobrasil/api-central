@@ -68,6 +68,7 @@ class ProdutoController extends Controller
         $validatedData = $request->validate([
             'nome' => 'required|string|max:255',
             'categoria_id' => 'required|exists:categorias,id',
+            'tipo' => 'required|in:venda,materia_prima,produto_acabado', // <-- ADICIONADO
             'preco_venda' => 'required|numeric',
             'preco_custo' => 'nullable|numeric',
             'estoque_atual' => 'nullable|numeric',
@@ -85,7 +86,6 @@ class ProdutoController extends Controller
        
         DB::beginTransaction();
         try {
-            // Adiciona o empresa_id ao criar o produto
             $produtoData = array_merge($validatedData, ['empresa_id' => Auth::user()->empresa_id]);
             $produto = Produto::create($produtoData);
     
@@ -93,7 +93,6 @@ class ProdutoController extends Controller
                 $produto->dadosFiscais()->create($request->input('fiscal'));
             }
 
-            // --- INÍCIO: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
             $estoqueInicial = floatval($validatedData['estoque_atual'] ?? 0);
 
             if ($estoqueInicial > 0) {
@@ -101,9 +100,9 @@ class ProdutoController extends Controller
                     'empresa_id' => Auth::user()->empresa_id,
                     'produto_id' => $produto->id,
                     'user_id' => Auth::id(),
-                    'tipo_movimento' => 'entrada_inicial', // Ou 'ajuste_manual_entrada'
+                    'tipo_movimento' => 'entrada_inicial',
                     'quantidade' => $estoqueInicial,
-                    'saldo_anterior' => 0, // Saldo anterior é zero para um novo produto
+                    'saldo_anterior' => 0,
                     'saldo_novo' => $estoqueInicial,
                     'origem_id' => $produto->id,
                     'origem_type' => Produto::class,
@@ -111,7 +110,6 @@ class ProdutoController extends Controller
                     'updated_at' => now(),
                 ]);
             }
-            // --- FIM: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
     
             DB::commit();
             return redirect()->route('produtos.index')->with('success', 'Produto cadastrado com sucesso!');
@@ -153,6 +151,7 @@ class ProdutoController extends Controller
         $validatedData = $request->validate([
             'nome' => 'required|string|max:255',
             'categoria_id' => 'required|exists:categorias,id',
+            'tipo' => 'required|in:venda,materia_prima,produto_acabado', // <-- ADICIONADO
             'preco_venda' => 'required|numeric',
             'preco_custo' => 'nullable|numeric',
             'estoque_atual' => 'nullable|numeric',
@@ -170,11 +169,7 @@ class ProdutoController extends Controller
     
         DB::beginTransaction();
         try {
-            // --- INÍCIO: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
-            // 1. Captura o saldo de estoque ANTES da atualização
             $saldoAnterior = $produto->estoque_atual;
-            // --- FIM: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
-
             $produto->update($validatedData);
     
             if ($request->has('fiscal')) {
@@ -184,19 +179,16 @@ class ProdutoController extends Controller
                 );
             }
 
-            // --- INÍCIO: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
-            // 2. Pega o saldo NOVO e calcula a diferença
-            $saldoNovo = $produto->fresh()->estoque_atual; // .fresh() garante pegar o valor atualizado do BD
+            $saldoNovo = $produto->fresh()->estoque_atual;
             $quantidadeMovimentada = $saldoNovo - $saldoAnterior;
 
-            // 3. Se a quantidade mudou, registra o movimento
             if ($quantidadeMovimentada != 0) {
                 DB::table('estoque_movimentos')->insert([
                     'empresa_id' => Auth::user()->empresa_id,
                     'produto_id' => $produto->id,
                     'user_id' => Auth::id(),
                     'tipo_movimento' => $quantidadeMovimentada > 0 ? 'ajuste_manual_entrada' : 'ajuste_manual_saida',
-                    'quantidade' => abs($quantidadeMovimentada), // Usa o valor absoluto da movimentação
+                    'quantidade' => abs($quantidadeMovimentada),
                     'saldo_anterior' => $saldoAnterior,
                     'saldo_novo' => $saldoNovo,
                     'origem_id' => $produto->id,
@@ -205,7 +197,6 @@ class ProdutoController extends Controller
                     'updated_at' => now(),
                 ]);
             }
-            // --- FIM: LÓGICA DE MOVIMENTAÇÃO DE ESTOQUE ---
     
             DB::commit();
             return redirect()->route('produtos.index')->with('success', 'Produto atualizado com sucesso!');

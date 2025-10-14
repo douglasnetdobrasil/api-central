@@ -23,7 +23,16 @@ use App\Http\Controllers\PdvCaixaController;
 use App\Livewire\FechamentoCaixa;
 use App\Http\Livewire\Fiscal\ContingenciaMonitor;
 use App\Http\Controllers\Fiscal\ContingenciaController;
-use App\Http\Controllers\VendaController; 
+use App\Http\Controllers\VendaController;
+use App\Http\Controllers\RelatorioVendaController; 
+use App\Http\Controllers\RelatorioFinanceiroController;
+use App\Http\Controllers\RelatorioEstoqueController;
+use App\Http\Controllers\RelatorioComprasController;
+use App\Http\Controllers\InventarioController;
+use App\Http\Controllers\InventarioItemController;
+use App\Http\Controllers\FichaTecnicaController; // Adicionado para clareza
+use App\Http\Controllers\OrdemServicoController;
+use App\Http\Controllers\ClienteEquipamentoController;
 
 
 use App\Services\NFCeService;
@@ -35,8 +44,8 @@ use App\Http\Controllers\PerfilFiscalController;
 use App\Http\Controllers\ConfiguracaoController;
 use App\Livewire\Pdv;
 use App\Livewire\NfeAvulsaCreate;
-use App\Livewire\NfeRascunhos; // <-- IMPORTANTE: Importe o novo componente de rascunhos
-use App\Models\Venda;          // <-- IMPORTANTE: Importe o Model de Venda
+use App\Livewire\NfeRascunhos;
+use App\Models\Venda;
 use App\Livewire\NfeAvulsaFormulario;
 use App\Livewire\NfeAvulsaCriar;
 
@@ -53,13 +62,13 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     
-    // Compras (Original - MANTIDO)
+    // Compras
     Route::post('/compras/importar-xml', [CompraWebController::class, 'importarXml'])->name('compras.importarXml');
     Route::get('/compras/importacao/revisar', [CompraWebController::class, 'revisarImportacao'])->name('compras.revisarImportacao');
     Route::post('/compras/importacao/salvar', [CompraWebController::class, 'salvarImportacao'])->name('compras.salvarImportacao');
     Route::resource('compras', CompraWebController::class);
 
-    // Cadastros (Original - MANTIDO)
+    // Cadastros
     Route::resource('categorias', CategoriaController::class);
     Route::get('/produtos/search', [ProdutoController::class, 'search'])->name('produtos.search');
     Route::resource('produtos', ProdutoController::class);
@@ -68,21 +77,21 @@ Route::middleware('auth')->group(function () {
     Route::resource('transportadoras', TransportadoraController::class);
     Route::resource('formas-pagamento', FormaPagamentoController::class);
 
+    // Estoque
     Route::get('/estoque', [EstoqueController::class, 'index'])->name('estoque.index');
-Route::get('/estoque/{produto}', [EstoqueController::class, 'show'])->name('estoque.show');
+    Route::get('/estoque/{produto}', [EstoqueController::class, 'show'])->name('estoque.show');
 
-    // Admin (Original - MANTIDO)
+    // Admin
     Route::middleware(['can:acessar-admin'])->group(function () {
         Route::resource('perfis', RoleController::class)->except(['show']);
         Route::resource('usuarios', UserController::class);
         Route::resource('empresa', EmpresaController::class)->except(['show']);
-       
     });
 
-     // Rota para a busca de clientes via API para o Select2 (Original - MANTIDO)
-     Route::get('/api/clientes/search', [App\Http\Controllers\ClienteController::class, 'search'])->name('api.clientes.search');
+    // API
+    Route::get('/api/clientes/search', [ClienteController::class, 'search'])->name('api.clientes.search');
 
-    // Vendas e Orçamentos (Original - MANTIDO)
+    // Vendas e Orçamentos
     Route::resource('orcamentos', OrcamentoController::class);
     Route::post('/orcamentos/{orcamento}/converter-venda', [OrcamentoController::class, 'converterEmVenda'])->name('orcamentos.converterVenda');
     Route::resource('cotacoes', CotacaoController::class);
@@ -93,14 +102,10 @@ Route::get('/estoque/{produto}', [EstoqueController::class, 'show'])->name('esto
     Route::post('/pedidos/{venda}/emitir-nfe', [NFeController::class, 'emitir'])->name('pedidos.emitirNFe');
     Route::resource('contas_a_pagar', App\Http\Controllers\ContaAPagarController::class);
     Route::resource('contas_a_receber', App\Http\Controllers\ContaAReceberController::class); 
+    Route::get('/vendas', [VendaController::class, 'index'])->name('vendas.index');
+    Route::get('/vendas/{venda}', [VendaController::class, 'show'])->name('vendas.show');
 
-    // NOVA ROTA para a tela principal de listagem de vendas
-Route::get('/vendas', [VendaController::class, 'index'])->name('vendas.index');
-
-    // NOVA ROTA para a tela de detalhes da venda
-Route::get('/vendas/{venda}', [VendaController::class, 'show'])->name('vendas.show');
-
-    // NFe (Original - MANTIDO)
+    // NFe
     Route::prefix('nfe')->name('nfe.')->group(function () {
         Route::get('/', [NFeController::class, 'index'])->name('index');
         Route::get('/importar-pedidos', [NFeController::class, 'importarPedidosView'])->name('importarPedidos');
@@ -111,40 +116,19 @@ Route::get('/vendas/{venda}', [VendaController::class, 'show'])->name('vendas.sh
         Route::post('/store', [NFeController::class, 'store'])->name('store');
         Route::post('/{nfe}/cce', [NFeController::class, 'enviarCCe'])->name('cce.enviar');
         Route::get('/cce/{cce}/pdf', [NFeController::class, 'downloadDacce'])->name('cce.pdf');
-       
-        // ===================================================================================
-        // ||||||||||||||||||| INÍCIO DA CORREÇÃO E ADIÇÃO DAS ROTAS ||||||||||||||||||||||||
-        // ===================================================================================
-        
-        // ADIÇÃO 1: Rota para a tela que LISTA os rascunhos de NFe Avulsa
-      
-        
-        // ADIÇÃO 2: Rota para a tela de EDITAR um rascunho (Venda com status 'Em Digitação')
-        // Esta rota é a que estava faltando e causando o erro 404
-       // Route::get('/avulsa/iniciar-nova-nfe/{venda?}', NfeAvulsaCreate::class)->name('avulsa.criar');
-      
-        
-       Route::get('/avulsa/editar/{venda}', NfeAvulsaFormulario::class)->name('avulsa.editar');
-       Route::get('/avulsa/criar', NfeAvulsaCriar::class)->name('avulsa.criar');
-       Route::get('/rascunhos', NfeRascunhos::class)->name('rascunhos');
-        // ===================================================================================
-        // ||||||||||||||||||||| FIM DA CORREÇÃO E ADIÇÃO DAS ROTAS |||||||||||||||||||||||||
-        // ===================================================================================
+        Route::get('/avulsa/editar/{venda}', NfeAvulsaFormulario::class)->name('avulsa.editar');
+        Route::get('/avulsa/criar', NfeAvulsaCriar::class)->name('avulsa.criar');
+        Route::get('/rascunhos', NfeRascunhos::class)->name('rascunhos');
     });
 
-    // ROTA ORIGINAL PARA CRIAR NOTA AVULSA (MANTIDA EXATAMENTE COMO ESTAVA)
-   
-        
-    // Rotas de rascunho antigas (MANTIDAS)
-  //  Route::post('/rascunho', [NFeController::class, 'storeRascunho'])->name('rascunho.store');
-   // Route::get('/rascunho/{nfe}/edit', [NFeController::class, 'editRascunho'])->name('rascunho.edit');
-   // Route::put('/rascunho/{nfe}', [NFeController::class, 'updateRascunho'])->name('rascunho.update');
-   // Route::post('/rascunho/{nfe}/emitir', [NFeController::class, 'emitirRascunho'])->name('rascunho.emitir');
+    // --- MÓDULO DE ORDEM DE SERVIÇO ---
+    Route::resource('ordens-servico', OrdemServicoController::class);
+    Route::resource('cliente-equipamentos', ClienteEquipamentoController::class);
 
-    // Utilitários (Original - MANTIDO)
+    // Utilitários
     Route::get('/consulta/cnpj/{cnpj}', [UtilController::class, 'consultarCnpj'])->name('consulta.cnpj');
     
-    // Novas rotas de admin (Original - MANTIDO)
+    // Admin (Novas Rotas)
     Route::prefix('admin')->name('admin.')->middleware(['can:acessar-admin'])->group(function () {
         Route::resource('perfis-fiscais', PerfilFiscalController::class);
         Route::get('configuracoes', [ConfiguracaoController::class, 'index'])->name('configuracoes.index');
@@ -152,14 +136,46 @@ Route::get('/vendas/{venda}', [VendaController::class, 'show'])->name('vendas.sh
         Route::resource('regras-tributarias', App\Http\Controllers\RegraTributariaController::class);
     });
 
+    // PDV
+    Route::get('/pdv-caixa', PdvCaixaController::class)->middleware(['can:operar-caixa'])->name('pdv-caixa.index');
+    Route::get('/pdv/fechamento', FechamentoCaixa::class)->name('pdv.fechamento');
 
-    Route::get('/pdv-caixa', PdvCaixaController::class)
-    ->middleware(['auth', 'can:operar-caixa']) // <-- ADICIONE O 'can:operar-caixa'
-    ->name('pdv-caixa.index');
+    // RELATORIOS 
+    Route::get('/relatorios/vendas', [RelatorioVendaController::class, 'index'])->name('relatorios.vendas.index');
+    Route::get('/relatorios/financeiro', [RelatorioFinanceiroController::class, 'index'])->name('relatorios.financeiro.index');
+    Route::get('/relatorios/estoque', [RelatorioEstoqueController::class, 'index'])->name('relatorios.estoque.index');
+    Route::get('/relatorios/estoque/movimentacoes/{produto}', [RelatorioEstoqueController::class, 'movimentacoes'])->name('relatorios.estoque.movimentacoes');
+    Route::get('/relatorios/compras', [RelatorioComprasController::class, 'index'])->name('relatorios.compras.index');
 
-   // Rota para a tela de Fechamento de Caixa
-   Route::get('/pdv/fechamento', FechamentoCaixa::class)->name('pdv.fechamento');
+    // --- MÓDULO DE INVENTÁRIO ---
+    Route::prefix('inventarios')->name('inventarios.')->group(function () {
+        Route::get('/', [InventarioController::class, 'index'])->name('index');
+        Route::get('/create', [InventarioController::class, 'create'])->name('create');
+        Route::post('/', [InventarioController::class, 'store'])->name('store');
+        Route::get('/{inventario}/contagem', [InventarioController::class, 'showContagem'])->name('contagem');
+        Route::get('/{inventario}/reconciliacao', [InventarioController::class, 'showReconciliacao'])->name('reconciliacao');
+        Route::post('/{inventario}/finalizar', [InventarioController::class, 'finalizar'])->name('finalizar');
+        Route::patch('/item/{inventarioItem}', [InventarioItemController::class, 'update'])->name('item.update');
+        Route::get('/{inventario}/visualizar', [InventarioController::class, 'showVisualizacao'])->name('visualizar');
+        Route::post('/{inventario}/marcar-contado', [InventarioController::class, 'marcarComoContado'])->name('marcarContado');
+    });
 
+    // =====================================================================
+    // ||||||||||||||||||||| ROTAS MOVIDAS PARA AQUI |||||||||||||||||||||||
+    // =====================================================================
+    // --- MÓDULO DE PRODUÇÃO (FICHA TÉCNICA) ---
+    Route::post('ficha-tecnica/{produto}/store-item', [FichaTecnicaController::class, 'storeItem'])->name('ficha-tecnica.storeItem');
+    Route::resource('ficha-tecnica', FichaTecnicaController::class)->except(['show']);
+   
+    
+  // --- MÓDULO DE PRODUÇÃO (ORDEM DE PRODUÇÃO) ---
+Route::post('ordem-producao/{ordemProducao}/iniciar', [App\Http\Controllers\OrdemProducaoController::class, 'iniciarProducao'])->name('ordem-producao.iniciar');
+Route::post('ordem-producao/{ordemProducao}/finalizar', [App\Http\Controllers\OrdemProducaoController::class, 'finalizarProducao'])->name('ordem-producao.finalizar'); // <-- ADICIONE ESTA LINHA
+Route::resource('ordem-producao', App\Http\Controllers\OrdemProducaoController::class)->except(['edit', 'update']);
+Route::get('/producao', App\Http\Controllers\ProducaoDashboardController::class)->name('producao.dashboard');   
+   
+    // FISCAL
+    Route::get('/fiscal', [ContingenciaController::class, 'index'])->name('fiscal.index');
 
     Route::get('/teste-status-sefaz', function () {
         if (!Auth::check()) {
@@ -222,6 +238,7 @@ Route::get('/vendas/{venda}', [VendaController::class, 'show'])->name('vendas.sh
             dd('FALHA. A classe ainda não foi encontrada.', $e->getMessage());
         }
     });
-});
+
+}); // FIM DO GRUPO GERAL DE MIDDLEWARE 'auth'
 
 require __DIR__.'/auth.php';

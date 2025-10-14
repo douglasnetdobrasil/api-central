@@ -1,6 +1,5 @@
 <x-app-layout>
     <x-slot name="header">
-        {{-- CORREÇÃO LÓGICA: Usando $produto->exists para o título --}}
         <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
             {{ $produto->exists ? 'Editar Produto' : 'Cadastrar Novo Produto' }}
         </h2>
@@ -28,22 +27,13 @@
                         </div>
                     @endif
 
-                    {{-- ===================================================================== --}}
-                    {{-- |||||||||||||||||||||||||| ÁREA CORRIGIDA |||||||||||||||||||||||||| --}}
-                    {{-- ===================================================================== --}}
                     @if ($produto->exists)
-                        {{-- Formulário para EDITAR um produto existente --}}
                         <form action="{{ route('produtos.update', $produto) }}" method="POST">
                             @method('PUT')
                     @else
-                        {{-- Formulário para CRIAR um novo produto --}}
                         <form action="{{ route('produtos.store') }}" method="POST">
                     @endif
                         @csrf
-                        {{-- ===================================================================== --}}
-                        {{-- |||||||||||||||||||||||| FIM DA ÁREA CORRIGIDA ||||||||||||||||||||| --}}
-                        {{-- ===================================================================== --}}
-
 
                         {{-- DADOS PRINCIPAIS --}}
                         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Dados Principais</h3>
@@ -53,17 +43,9 @@
                                 <x-text-input id="nome" name="nome" type="text" class="mt-1 block w-full" :value="old('nome', $produto->nome ?? '')" required />
                             </div>
                             <div>
-        <x-input-label for="unidade" value="Unidade" />
-        <x-text-input id="unidade" name="unidade" type="text" placeholder="Ex: UN, KG, CX, PC" class="mt-1 block w-full" :value="old('unidade', $produto->unidade ?? '')" required />
-    </div>
-
-    <div>
-        <x-input-label for="categoria_id" value="Categoria" />
-        <select id="categoria_id" name="categoria_id" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
-            {{-- ... opções de categoria ... --}}
-        </select>
-    </div>
-</div>
+                                <x-input-label for="unidade" value="Unidade" />
+                                <x-text-input id="unidade" name="unidade" type="text" placeholder="Ex: UN, KG, CX, PC" class="mt-1 block w-full" :value="old('unidade', $produto->unidade ?? '')" required />
+                            </div>
                             <div>
                                 <x-input-label for="categoria_id" value="Categoria" />
                                 <select id="categoria_id" name="categoria_id" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
@@ -75,6 +57,31 @@
                                     @endforeach
                                 </select>
                             </div>
+                            
+                            {{-- ======================================================= --}}
+                            {{-- ||||||||||||||||||| CAMPO ADICIONADO ||||||||||||||||||| --}}
+                            {{-- ======================================================= --}}
+                            <div>
+                                <x-input-label for="tipo" value="Tipo de Produto" />
+                                <select name="tipo" id="tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-900 dark:border-gray-600">
+                                    @php
+                                        $tipos = [
+                                            'venda' => 'Para Venda Direta',
+                                            'materia_prima' => 'Matéria-Prima (Insumo)',
+                                            'produto_acabado' => 'Produto Acabado (Produção)'
+                                        ];
+                                        $tipoSelecionado = old('tipo', $produto->tipo ?? 'venda');
+                                    @endphp
+                                    @foreach ($tipos as $valor => $descricao)
+                                        <option value="{{ $valor }}" {{ $tipoSelecionado == $valor ? 'selected' : '' }}>
+                                            {{ $descricao }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            {{-- ======================================================= --}}
+                            {{-- ||||||||||||||||||| FIM DO CAMPO ||||||||||||||||||||||| --}}
+                            {{-- ======================================================= --}}
                         </div>
 
                         {{-- PREÇOS E ESTOQUE --}}
@@ -94,9 +101,10 @@
                             </div>
                         </div>
 
-                        {{-- DADOS FISCAIS (O restante do arquivo continua igual) --}}
+                        {{-- DADOS FISCAIS --}}
                         <h3 class="text-lg font-medium mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">Dados Fiscais</h3>
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4">
+                            {{-- ... (o resto do formulário de dados fiscais continua igual) ... --}}
                             <div>
                                 <x-input-label for="codigo_barras" value="Código de Barras (GTIN/EAN)" />
                                 <x-text-input id="codigo_barras" name="codigo_barras" type="text" class="mt-1 block w-full" :value="old('codigo_barras', $produto->codigo_barras ?? '')" />
@@ -143,7 +151,7 @@
                                 Salvar Produto
                             </x-primary-button>
                         </div>
-                    </form> {{-- A tag de fechamento agora fica aqui no final --}}
+                    </form>
                 </div>
             </div>
         </div>

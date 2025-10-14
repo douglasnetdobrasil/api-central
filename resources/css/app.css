@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media print {
+    /* Esconde o cabeçalho, a barra lateral, os filtros e botões na impressão */
+    #header,
+    #sidebar,
+    #filtros,
+    .no-print {
+        display: none !important;
+    }
+
+    /* Remove sombras e ajusta o layout para a página de impressão */
+    body {
+        background-color: #fff;
+    }
+
+    .py-12 {
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+
+    .shadow-sm, .sm\:rounded-lg {
+        box-shadow: none !important;
+        border: 1px solid #ccc; /* Adiciona uma borda sutil para as seções */
+    }
+    
+    .dark\:bg-gray-800, .dark\:bg-gray-700, .bg-white {
+        background-color: #fff !important;
+    }
+    
+    .dark\:text-gray-100, .dark\:text-gray-200, .dark\:text-gray-300, .text-gray-900 {
+        color: #000 !important;
+    }
+}

@@ -273,7 +273,7 @@
                     </x-dropdown-link>
                 @endcan
                 @can('ver-inventario')
-                    <x-dropdown-link :href="route('clientes.index')">
+                    <x-dropdown-link :href="route('inventarios.index')">
                         {{ __('Inventário') }}
                     </x-dropdown-link>
                 @endcan
@@ -304,7 +304,7 @@
 
             <x-slot name="content">
                 @can('ver-ordem-producao')
-                    <x-dropdown-link :href="route('produtos.index')">
+                    <x-dropdown-link :href="route('producao.dashboard')">
                         {{ __('Ordem de Produção (OP)') }}
                     </x-dropdown-link>
                 @endcan
@@ -314,7 +314,7 @@
                     </x-dropdown-link>
                 @endcan
                 @can('ver-ordem-servico')
-                    <x-dropdown-link :href="route('clientes.index')">
+                    <x-dropdown-link :href="route('ordens-servico.index')">
                         {{ __('Ordem de Serviço (OS)') }}
                     </x-dropdown-link>
                 @endcan
@@ -339,22 +339,22 @@
 
             <x-slot name="content">
                 @can('ver-relatorio-vendas')
-                    <x-dropdown-link :href="route('produtos.index')">
+                    <x-dropdown-link :href="route('relatorios.vendas.index')">
                         {{ __('Relatórios de Vendas') }}
                     </x-dropdown-link>
                 @endcan
                 @can('ver-relatorio-financeiro')
-                    <x-dropdown-link :href="route('fornecedores.index')">
+                    <x-dropdown-link :href="route('relatorios.financeiro.index')">
                         {{ __('Relatórios Financeiros') }}
                     </x-dropdown-link>
                 @endcan
                 @can('ver-relatorio-estoque')
-                    <x-dropdown-link :href="route('clientes.index')">
+                    <x-dropdown-link :href="route('relatorios.estoque.index')">
                         {{ __('Relatórios de Estoque') }}
                     </x-dropdown-link>
                 @endcan
                 @can('ver-relatorio-compras')
-                    <x-dropdown-link :href="route('clientes.index')">
+                    <x-dropdown-link :href="route('relatorios.compras.index')">
                         {{ __('Relatórios de Compras') }}
                     </x-dropdown-link>
                 @endcan
