@@ -122,9 +122,20 @@ Route::middleware('auth')->group(function () {
     });
 
     // --- MÓDULO DE ORDEM DE SERVIÇO ---
-    Route::resource('ordens-servico', OrdemServicoController::class);
+    Route::resource('ordens-servico', OrdemServicoController::class)->parameters([
+        'ordens-servico' => 'ordemServico'
+    ]);
     Route::resource('cliente-equipamentos', ClienteEquipamentoController::class);
 
+  // Rotas para adicionar/remover PRODUTOS da OS
+Route::post('/ordens-servico/{ordemServico}/produtos', [OrdemServicoController::class, 'storeProduto'])->name('os.produtos.store');
+Route::delete('/os-produtos/{osProduto}', [OrdemServicoController::class, 'destroyProduto'])->name('os.produtos.destroy');
+
+Route::get('/ordens-servico/{ordemServico}/imprimir', [OrdemServicoController::class, 'imprimir'])->name('ordens-servico.imprimir');
+
+// Rotas para adicionar/remover SERVIÇOS da OS
+Route::post('/ordens-servico/{ordemServico}/servicos', [OrdemServicoController::class, 'storeServico'])->name('os.servicos.store');
+Route::delete('/os-servicos/{osServico}', [OrdemServicoController::class, 'destroyServico'])->name('os.servicos.destroy');
     // Utilitários
     Route::get('/consulta/cnpj/{cnpj}', [UtilController::class, 'consultarCnpj'])->name('consulta.cnpj');
     

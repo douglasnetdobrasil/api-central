@@ -178,6 +178,33 @@ CREATE TABLE `cces` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `cliente_equipamentos`
+--
+
+DROP TABLE IF EXISTS `cliente_equipamentos`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cliente_equipamentos` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `empresa_id` bigint unsigned NOT NULL,
+  `cliente_id` bigint unsigned NOT NULL,
+  `descricao` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Ex: Notebook Dell Vostro, iPhone 13 Pro',
+  `marca` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `modelo` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `numero_serie` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `observacoes` text COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `cliente_equipamentos_numero_serie_unique` (`numero_serie`),
+  KEY `cliente_equipamentos_empresa_id_foreign` (`empresa_id`),
+  KEY `cliente_equipamentos_cliente_id_foreign` (`cliente_id`),
+  CONSTRAINT `cliente_equipamentos_cliente_id_foreign` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `cliente_equipamentos_empresa_id_foreign` FOREIGN KEY (`empresa_id`) REFERENCES `empresas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `clientes`
 --
 
@@ -384,7 +411,7 @@ CREATE TABLE `contas_a_receber` (
   CONSTRAINT `contas_a_receber_cliente_id_foreign` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `contas_a_receber_empresa_id_foreign` FOREIGN KEY (`empresa_id`) REFERENCES `empresas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `contas_a_receber_venda_id_foreign` FOREIGN KEY (`venda_id`) REFERENCES `vendas` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -619,7 +646,7 @@ CREATE TABLE `estoque_movimentos` (
   CONSTRAINT `estoque_movimentos_empresa_id_foreign` FOREIGN KEY (`empresa_id`) REFERENCES `empresas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `estoque_movimentos_produto_id_foreign` FOREIGN KEY (`produto_id`) REFERENCES `produtos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `estoque_movimentos_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=97 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=100 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -764,7 +791,7 @@ CREATE TABLE `inventario_items` (
   KEY `inventario_items_produto_id_foreign` (`produto_id`),
   CONSTRAINT `inventario_items_inventario_id_foreign` FOREIGN KEY (`inventario_id`) REFERENCES `inventarios` (`id`) ON DELETE CASCADE,
   CONSTRAINT `inventario_items_produto_id_foreign` FOREIGN KEY (`produto_id`) REFERENCES `produtos` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=285 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=288 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -789,7 +816,7 @@ CREATE TABLE `inventarios` (
   KEY `inventarios_user_id_foreign` (`user_id`),
   CONSTRAINT `inventarios_empresa_id_foreign` FOREIGN KEY (`empresa_id`) REFERENCES `empresas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `inventarios_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -907,7 +934,7 @@ CREATE TABLE `migrations` (
   `migration` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `batch` int NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=99 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=104 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1135,6 +1162,119 @@ CREATE TABLE `ordens_producao` (
   CONSTRAINT `ordens_producao_produto_acabado_id_foreign` FOREIGN KEY (`produto_acabado_id`) REFERENCES `produtos` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `ordens_producao_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `ordens_servico`
+--
+
+DROP TABLE IF EXISTS `ordens_servico`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ordens_servico` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `empresa_id` bigint unsigned NOT NULL,
+  `cliente_id` bigint unsigned NOT NULL,
+  `cliente_equipamento_id` bigint unsigned DEFAULT NULL,
+  `tecnico_id` bigint unsigned DEFAULT NULL,
+  `status` enum('Aberta','Aguardando Aprovação','Aprovada','Em Execução','Aguardando Peças','Concluída','Faturada','Cancelada') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Aberta',
+  `data_entrada` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `data_previsao_conclusao` date DEFAULT NULL,
+  `data_conclusao` timestamp NULL DEFAULT NULL,
+  `equipamento` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Descrição do equipamento caso não seja cadastrado',
+  `numero_serie` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `defeito_relatado` text COLLATE utf8mb4_unicode_ci,
+  `laudo_tecnico` text COLLATE utf8mb4_unicode_ci,
+  `garantia` text COLLATE utf8mb4_unicode_ci,
+  `valor_servicos` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `valor_produtos` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `valor_desconto` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `valor_total` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `venda_id` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `ordens_servico_empresa_id_foreign` (`empresa_id`),
+  KEY `ordens_servico_cliente_id_foreign` (`cliente_id`),
+  KEY `ordens_servico_cliente_equipamento_id_foreign` (`cliente_equipamento_id`),
+  KEY `ordens_servico_tecnico_id_foreign` (`tecnico_id`),
+  KEY `ordens_servico_venda_id_foreign` (`venda_id`),
+  KEY `ordens_servico_status_index` (`status`),
+  CONSTRAINT `ordens_servico_cliente_equipamento_id_foreign` FOREIGN KEY (`cliente_equipamento_id`) REFERENCES `cliente_equipamentos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ordens_servico_cliente_id_foreign` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `ordens_servico_empresa_id_foreign` FOREIGN KEY (`empresa_id`) REFERENCES `empresas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ordens_servico_tecnico_id_foreign` FOREIGN KEY (`tecnico_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ordens_servico_venda_id_foreign` FOREIGN KEY (`venda_id`) REFERENCES `vendas` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `os_historico`
+--
+
+DROP TABLE IF EXISTS `os_historico`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `os_historico` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `ordem_servico_id` bigint unsigned NOT NULL,
+  `user_id` bigint unsigned NOT NULL,
+  `descricao` text COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Ex: Status alterado para "Aprovada"',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `os_historico_ordem_servico_id_foreign` (`ordem_servico_id`),
+  KEY `os_historico_user_id_foreign` (`user_id`),
+  CONSTRAINT `os_historico_ordem_servico_id_foreign` FOREIGN KEY (`ordem_servico_id`) REFERENCES `ordens_servico` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `os_historico_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `os_produtos`
+--
+
+DROP TABLE IF EXISTS `os_produtos`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `os_produtos` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `ordem_servico_id` bigint unsigned NOT NULL,
+  `produto_id` bigint unsigned NOT NULL,
+  `quantidade` decimal(10,3) NOT NULL,
+  `preco_unitario` decimal(10,2) NOT NULL,
+  `subtotal` decimal(10,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `os_produtos_ordem_servico_id_foreign` (`ordem_servico_id`),
+  KEY `os_produtos_produto_id_foreign` (`produto_id`),
+  CONSTRAINT `os_produtos_ordem_servico_id_foreign` FOREIGN KEY (`ordem_servico_id`) REFERENCES `ordens_servico` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `os_produtos_produto_id_foreign` FOREIGN KEY (`produto_id`) REFERENCES `produtos` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `os_servicos`
+--
+
+DROP TABLE IF EXISTS `os_servicos`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `os_servicos` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `ordem_servico_id` bigint unsigned NOT NULL,
+  `servico_id` bigint unsigned NOT NULL,
+  `quantidade` decimal(10,2) NOT NULL COMMENT 'Pode representar horas de serviço',
+  `preco_unitario` decimal(10,2) NOT NULL,
+  `subtotal` decimal(10,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `os_servicos_ordem_servico_id_foreign` (`ordem_servico_id`),
+  KEY `os_servicos_servico_id_foreign` (`servico_id`),
+  CONSTRAINT `os_servicos_ordem_servico_id_foreign` FOREIGN KEY (`ordem_servico_id`) REFERENCES `ordens_servico` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `os_servicos_servico_id_foreign` FOREIGN KEY (`servico_id`) REFERENCES `produtos` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1672,4 +1812,4 @@ CREATE TABLE `vendas` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-14 14:08:17
+-- Dump completed on 2025-10-15 11:55:54

@@ -68,7 +68,8 @@
                                         $tipos = [
                                             'venda' => 'Para Venda Direta',
                                             'materia_prima' => 'Matéria-Prima (Insumo)',
-                                            'produto_acabado' => 'Produto Acabado (Produção)'
+                                            'produto_acabado' => 'Produto Acabado (Produção)',
+                                            'servico' => 'Servico (Servico)'
                                         ];
                                         $tipoSelecionado = old('tipo', $produto->tipo ?? 'venda');
                                     @endphp

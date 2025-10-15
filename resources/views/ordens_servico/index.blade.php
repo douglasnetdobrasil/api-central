@@ -49,13 +49,17 @@
                             <input type="text" name="search_cliente" id="search_cliente" value="{{ request('search_cliente') }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
                         </div>
                         <div class="sm:col-span-2">
-                            <label for="search_equipamento" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Equipamento</label>
-                            <input type="text" name="search_equipamento" id="search_equipamento" value="{{ request('search_equipamento') }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
-                        </div>
-                        <div>
-                            <label for="data_inicio" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data de</label>
-                            <input type="date" name="data_inicio" id="data_inicio" value="{{ request('data_inicio') }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
-                        </div>
+    <label for="status" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+    <select name="status" id="status" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+        <option value="Todos">Todos</option>
+        <option value="Em Aberto" {{ request('status') == 'Em Aberto' ? 'selected' : '' }}>Em Aberto</option>
+        <option value="Aguardando Orçamento" {{ request('status') == 'Aguardando Orçamento' ? 'selected' : '' }}>Aguardando Orçamento</option>
+        <option value="Aprovada" {{ request('status') == 'Aprovada' ? 'selected' : '' }}>Aprovada</option>
+        <option value="Em Execução" {{ request('status') == 'Em Execução' ? 'selected' : '' }}>Em Execução</option>
+        <option value="Concluída" {{ request('status') == 'Concluída' ? 'selected' : '' }}>Concluída</option>
+        <option value="Cancelada" {{ request('status') == 'Cancelada' ? 'selected' : '' }}>Cancelada</option>
+    </select>
+</div>
                         <div>
                             <label for="data_fim" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Até</label>
                             <input type="date" name="data_fim" id="data_fim" value="{{ request('data_fim') }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">

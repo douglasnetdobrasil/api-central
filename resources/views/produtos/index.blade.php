@@ -71,6 +71,9 @@
                                                 @case('produto_acabado')
                                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Produção</span>
                                                     @break
+                                                    @case('servico')
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Servico</span>
+                                                    @break
                                                 @default
                                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Venda Direta</span>
                                             @endswitch

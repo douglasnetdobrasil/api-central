@@ -68,7 +68,7 @@ class ProdutoController extends Controller
         $validatedData = $request->validate([
             'nome' => 'required|string|max:255',
             'categoria_id' => 'required|exists:categorias,id',
-            'tipo' => 'required|in:venda,materia_prima,produto_acabado', // <-- ADICIONADO
+            'tipo' => 'required|in:venda,materia_prima,produto_acabado,servico', // <-- ADICIONADO
             'preco_venda' => 'required|numeric',
             'preco_custo' => 'nullable|numeric',
             'estoque_atual' => 'nullable|numeric',
@@ -151,7 +151,7 @@ class ProdutoController extends Controller
         $validatedData = $request->validate([
             'nome' => 'required|string|max:255',
             'categoria_id' => 'required|exists:categorias,id',
-            'tipo' => 'required|in:venda,materia_prima,produto_acabado', // <-- ADICIONADO
+            'tipo' => 'required|in:venda,materia_prima,produto_acabado,servico', // <-- ADICIONADO
             'preco_venda' => 'required|numeric',
             'preco_custo' => 'nullable|numeric',
             'estoque_atual' => 'nullable|numeric',

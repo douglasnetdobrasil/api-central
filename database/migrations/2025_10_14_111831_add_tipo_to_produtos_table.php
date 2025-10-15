@@ -12,10 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('produtos', function (Blueprint $table) {
-            $table->enum('tipo', ['venda', 'materia_prima', 'produto_acabado'])
+            $table->enum('tipo', ['venda', 'materia_prima', 'produto_acabado','servico'])
                   ->default('venda')
                   ->after('ativo')
-                  ->comment('Classifica o item para diferentes lógicas (venda, insumo, resultado de produção).');
+                  ->comment('Classifica o item para diferentes lógicas (venda, insumo, resultado de produção,servico).');
         });
     }
 
