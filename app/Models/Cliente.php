@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Scopes\EmpresaScope;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cliente extends Model
 {
@@ -33,6 +34,12 @@ class Cliente extends Model
     protected $casts = [
         'data_nascimento' => 'date',
     ];
+
+    public function equipamentos(): HasMany
+    {
+        // Garante que o nome da chave estrangeira está correto ('cliente_id')
+        return $this->hasMany(ClienteEquipamento::class, 'cliente_id');
+    }
 
     public function pedidos()
     {

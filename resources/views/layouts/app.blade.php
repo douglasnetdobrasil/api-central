@@ -10,11 +10,14 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
+        {{-- Carrega CSS/JS definidos no vite.config.js (inclui Alpine.js) --}}
         @vite(['resources/css/app.css', 'resources/js/app.js'])
 
         @livewireStyles
 
-       
+        {{-- Permite que as views filhas adicionem CSS específico --}}
+        @stack('head') 
+
     </head>
     <body class="font-sans antialiased">
         <div class="min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -35,6 +38,7 @@
 
         @livewireScripts
 
+        {{-- Toast Notification (sem alterações) --}}
         <div 
             x-data="{ show: false, message: '', type: 'success' }" 
             @show-toast.window="message = $event.detail.message; type = $event.detail.type || 'success'; show = true; setTimeout(() => show = false, 3000)"
@@ -46,5 +50,14 @@
         >
             <span x-text="message"></span>
         </div>
+        <script> console.log("LOG DO LAYOUT: Antes do @stack('scripts')"); </script>
+        @stack('scripts')
+        <script> console.log("LOG DO LAYOUT: Depois do @stack('scripts')"); </script>
+        {{-- ========================================================== --}}
+        {{-- ||||||||||||||||||| AQUI ESTÁ A CORREÇÃO ||||||||||||||||||| --}}
+        {{-- ========================================================== --}}
+        {{-- Imprime qualquer script que foi "empurrado" pelas views filhas --}}
+      
+
     </body>
 </html>

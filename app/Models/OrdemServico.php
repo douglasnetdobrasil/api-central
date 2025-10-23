@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Scopes\EmpresaScope;
 use App\Models\OsProduto;
 use App\Models\OsServico;
+use App\Models\OsFoto;
 
 
 class OrdemServico extends Model
@@ -83,5 +84,17 @@ class OrdemServico extends Model
         $totalBruto = $this->valor_produtos + $this->valor_servicos;
         $this->valor_total = $totalBruto - $this->valor_desconto;
         $this->save();
+    }
+
+    // >> NOVO RELACIONAMENTO: Equipamento
+    public function equipamento(): BelongsTo
+    {
+        return $this->belongsTo(ClienteEquipamento::class, 'cliente_equipamento_id');
+    }
+
+    // >> NOVO RELACIONAMENTO: Fotos
+    public function fotos(): HasMany
+    {
+        return $this->hasMany(OsFoto::class, 'ordem_servico_id')->oldest();
     }
 }

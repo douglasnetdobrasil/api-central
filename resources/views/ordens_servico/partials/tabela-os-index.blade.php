@@ -1,3 +1,4 @@
+{{-- Este arquivo é para a tabela da página de listagem (index) --}}
 <div class="overflow-x-auto">
     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <thead class="bg-gray-50 dark:bg-gray-700">
@@ -18,12 +19,10 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $os->equipamento }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $os->data_entrada->format('d/m/Y H:i') }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        {{-- **MELHORIA: STATUS COM CORES** --}}
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                            {{-- Lógica de cores baseada no status (exemplo) --}}
                             @if($os->status == 'Concluída') bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300
                             @elseif($os->status == 'Cancelada') bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300
-                            @elseif(in_array($os->status, ['Aguardando Aprovação do Cliente', 'Aguardando Peças'])) bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300
+                            @elseif(in_array($os->status, ['Aguardando Aprovação', 'Aguardando Peças'])) bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300
                             @else bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 @endif">
                             {{ $os->status }}
                         </span>

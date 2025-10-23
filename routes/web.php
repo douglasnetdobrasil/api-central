@@ -33,6 +33,7 @@ use App\Http\Controllers\InventarioItemController;
 use App\Http\Controllers\FichaTecnicaController; // Adicionado para clareza
 use App\Http\Controllers\OrdemServicoController;
 use App\Http\Controllers\ClienteEquipamentoController;
+use App\Http\Controllers\CentroCustoController;
 
 
 use App\Services\NFCeService;
@@ -188,6 +189,28 @@ Route::get('/producao', App\Http\Controllers\ProducaoDashboardController::class)
     // FISCAL
     Route::get('/fiscal', [ContingenciaController::class, 'index'])->name('fiscal.index');
 
+
+    
+    //CENTRO DE CUSTO 
+    Route::resource('centros-custo', CentroCustoController::class)->middleware('auth');
+
+
+
+    Route::prefix('relatorios')->name('relatorios.')->middleware('auth')->group(function () {
+        Route::get('centros-custo/extrato', [CentroCustoRelatorioController::class, 'extratoForm'])->name('centros-custo.extratoForm');
+        Route::post('centros-custo/extrato', [CentroCustoRelatorioController::class, 'gerarExtrato'])->name('centros-custo.gerarExtrato');
+        
+        Route::get('centros-custo/fluxo-caixa', [CentroCustoRelatorioController::class, 'fluxoCaixaForm'])->name('centros-custo.fluxoCaixaForm');
+        Route::post('centros-custo/fluxo-caixa', [CentroCustoRelatorioController::class, 'gerarFluxoCaixa'])->name('centros-custo.gerarFluxoCaixa');
+        Route::resource('centros-custo', CentroCustoController::class)->except(['show']);
+
+    });
+
+
+
+    Route::get('/os/clientes/{clienteId}/equipamentos', [App\Http\Controllers\OrdemServicoController::class, 'getEquipamentosByCliente'])->name('os.equipamentos.by.cliente');
+    Route::post('/os/equipamentos/store-modal', [OrdemServicoController::class, 'storeEquipamentoModal'])
+         ->name('os.equipamentos.storeModal');
     Route::get('/teste-status-sefaz', function () {
         if (!Auth::check()) {
             return 'Você precisa estar logado para fazer este teste.';

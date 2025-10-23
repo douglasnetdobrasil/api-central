@@ -7,14 +7,16 @@ use App\Models\Cliente;
 use App\Models\User;
 use Illuminate\Http\Request;
 use App\Models\Produto;
-use App\Models\OsProduto; // <-- ADICIONADO: Importar para usar nos novos métodos
+use App\Models\OsProduto;
 use App\Models\OsServico;
 use App\Models\OsHistorico;
-use Illuminate\Support\Facades\DB; // <-- ADICIONADO: Essencial para transações seguras
+use App\Models\ClienteEquipamento;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class OrdemServicoController extends Controller
 {
-    // ... (Seus métodos index, create, store e show continuam aqui, sem alterações) ...
+    // ... (index e create - sem alterações) ...
     public function index(Request $request)
     {
         $query = OrdemServico::with(['cliente', 'tecnico'])->latest();
@@ -30,147 +32,158 @@ class OrdemServicoController extends Controller
         $tecnicos = User::orderBy('name')->get();
         return view('ordens_servico.create', compact('clientes', 'tecnicos'));
     }
+
+    // ... (store - atualizado anteriormente) ...
     public function store(Request $request)
     {
         $validatedData = $request->validate([
             'cliente_id' => 'required|exists:clientes,id',
             'tecnico_id' => 'nullable|exists:users,id',
             'status' => 'required|string|max:50',
-            'equipamento' => 'required|string|max:255',
             'defeito_relatado' => 'required|string',
+            'cliente_equipamento_id' => 'nullable|exists:cliente_equipamentos,id', // <-- CORRIGIDO: Agora é opcional
+            'data_previsao_conclusao' => 'nullable|date',
+            
+            // Campos de texto agora são a fonte principal se um equipamento existente não for selecionado
+            'equipamento' => 'required|string|max:255', // <-- CORRIGIDO: Agora é obrigatório
+            'numero_serie' => 'nullable|string|max:100',
         ]);
+
         $dadosParaCriar = $validatedData;
         $dadosParaCriar['empresa_id'] = auth()->user()->empresa_id;
         $dadosParaCriar['data_entrada'] = now();
+
+        // Esta lógica permanece a mesma e está correta:
+        // Se um equipamento existente FOI selecionado, ele usa os dados do BD.
+        // Se não, ele usa os dados digitados (que acabaram de ser validados).
+        $equipamento = ClienteEquipamento::find($request->cliente_equipamento_id);
+        if ($equipamento) {
+            $dadosParaCriar['equipamento'] = $equipamento->descricao;
+            $dadosParaCriar['numero_serie'] = $equipamento->numero_serie;
+        }
+
         $ordemServico = OrdemServico::create($dadosParaCriar);
-        return redirect()->route('ordens-servico.index')->with('success', "Ordem de Serviço #{$ordemServico->id} criada com sucesso!");
+
+        $ordemServico->historico()->create([
+            'user_id' => auth()->id(),
+            'descricao' => "OS Criada com status '{$ordemServico->status}'.",
+        ]);
+
+        return redirect()->route('ordens-servico.edit', $ordemServico->id)
+                         ->with('success', "Ordem de Serviço #{$ordemServico->id} criada! Adicione peças e serviços.");
     }
+    
+    // ... (show - sem alterações) ...
     public function show(OrdemServico $ordemServico)
     {
-        $ordemServico->load(['cliente', 'tecnico', 'produtos.produto', 'servicos.servico', 'servicos.tecnico']); // <-- LINHA CORRIGIDA
+        $ordemServico->load(['cliente', 'tecnico', 'produtos.produto', 'servicos.servico', 'servicos.tecnico']);
         return view('ordens_servico.show', compact('ordemServico'));
     }
 
-
-    /**
-     * Mostra o formulário para editar uma Ordem de Serviço existente.
-     */
+    // ... (edit - atualizado anteriormente) ...
     public function edit(OrdemServico $ordemServico)
     {
-        // Carrega os dados para os selects principais
         $clientes = Cliente::orderBy('nome')->get();
-        $tecnicos = User::orderBy('name')->get(); // Você pode adicionar ->where('tipo', 'tecnico') se tiver
-    
-        // Busca as PEÇAS disponíveis para adicionar
+        $tecnicos = User::orderBy('name')->get();
         $pecas = Produto::where('ativo', 1)
                         ->whereIn('tipo', ['venda', 'produto_acabado', 'materia_prima'])
                         ->orderBy('nome')
                         ->get();
-    
-        // Busca os SERVIÇOS disponíveis para adicionar
-        // Garanta que você tem produtos cadastrados com tipo='servico' no seu banco
         $servicos = Produto::where('ativo', 1)
                            ->where('tipo', 'servico')
                            ->orderBy('nome')
                            ->get();
-    
-        // Carrega os itens que JÁ ESTÃO na Ordem de Serviço para listá-los
+        
+        $equipamentosDoCliente = ClienteEquipamento::where('cliente_id', $ordemServico->cliente_id)
+                                                  ->orderBy('descricao')
+                                                  ->get();
+
         $ordemServico->load(['produtos.produto', 'servicos.servico', 'servicos.tecnico']);
     
-        // Envia todas as variáveis necessárias para a view
         return view('ordens_servico.edit', compact(
-            'ordemServico',
-            'clientes',
-            'tecnicos',
-            'pecas',     // <<-- Esta variável vai popular o dropdown de peças
-            'servicos'   // <<-- Esta variável vai popular o dropdown de serviços
+            'ordemServico', 'clientes', 'tecnicos', 'pecas', 'servicos', 'equipamentosDoCliente'
         ));
     }
 
     /**
-     * Atualiza uma Ordem de Serviço no banco de dados.
+     * ==========================================================
+     * ||||||||||||||||||| ESTE É O BUG PRINCIPAL |||||||||||||||||||
+     * ==========================================================
+     * Corrigido para usar 'descricao' e formatar o 'texto'
      */
+    public function getEquipamentosByCliente(int $clienteId): JsonResponse
+    {
+        $cliente = Cliente::findOrFail($clienteId);
+
+        $equipamentos = $cliente->equipamentos()
+            ->select('id', 'descricao', 'numero_serie') // <-- CORRIGIDO (era 'nome')
+            ->get()
+            ->map(function ($equip) {
+                // Formata o texto para exibição no dropdown
+                $equip->texto = $equip->descricao . ($equip->numero_serie ? " (SN: {$equip->numero_serie})" : "");
+                return $equip;
+            });
+
+        return response()->json($equipamentos);
+    }
+
+    // ... (update - atualizado anteriormente) ...
     public function update(Request $request, OrdemServico $ordemServico)
     {
-        // Validação completa para TODOS os campos do formulário principal
         $validatedData = $request->validate([
             'cliente_id' => 'required|exists:clientes,id',
             'tecnico_id' => 'nullable|exists:users,id',
             'status' => 'required|string|max:50',
-            'equipamento' => 'required|string|max:255',
-            'numero_serie' => 'nullable|string|max:100',
             'defeito_relatado' => 'required|string',
             'laudo_tecnico' => 'nullable|string',
             'data_previsao_conclusao' => 'nullable|date',
+            'cliente_equipamento_id' => 'required|exists:cliente_equipamentos,id',
+            'equipamento' => 'nullable|string|max:255',
+            'numero_serie' => 'nullable|string|max:100',
         ]);
     
-        // Lógica para registrar o histórico (que você já tinha)
         $mudancas = [];
         if ($ordemServico->status !== $validatedData['status']) {
             $mudancas[] = "Status alterado de '{$ordemServico->status}' para '{$validatedData['status']}'";
         }
+
+        $equipamento = ClienteEquipamento::find($request->cliente_equipamento_id);
+        if ($equipamento) {
+            $validatedData['equipamento'] = $equipamento->descricao;
+            $validatedData['numero_serie'] = $equipamento->numero_serie;
+        }
         
-        // Salva TODAS as alterações no banco de dados
         $ordemServico->update($validatedData);
     
         if (!empty($mudancas)) {
             $ordemServico->historico()->create([
-                'user_id' => auth()->id(), // <-- CORREÇÃO AQUI
+                'user_id' => auth()->id(),
                 'descricao' => implode('. ', $mudancas) . '.',
             ]);
         }
     
-        // Redireciona de volta com mensagem de sucesso
         return redirect()->route('ordens-servico.edit', $ordemServico->id)
                          ->with('success', 'Dados principais da Ordem de Serviço atualizados com sucesso!');
     }
 
-
-    // ===================================================================
-    // ||||||||||||||||||||| MÉTODOS NOVOS ADICIONADOS |||||||||||||||||||||
-    // ===================================================================
-
-    /**
-     * Adiciona um produto a uma Ordem de Serviço.
-     */
-
+    // ... (imprimir, storeProduto, destroyProduto, storeServico, destroyServico, destroy - sem alterações) ...
     public function imprimir(OrdemServico $ordemServico)
     {
-        // Carrega todos os relacionamentos necessários para a impressão
         $ordemServico->load(['cliente', 'tecnico', 'produtos.produto', 'servicos.servico', 'servicos.tecnico']);
-    
-        // Busca os dados da empresa para o cabeçalho
         $empresa = auth()->user()->empresa;
-    
-        // Retorna a nova view 'imprimir.blade.php' com os dados
         return view('ordens_servico.imprimir', compact('ordemServico', 'empresa'));
     }
     public function storeProduto(Request $request, OrdemServico $ordemServico)
     {
-        $request->validate([
-            'produto_id' => 'required|exists:produtos,id',
-            'quantidade' => 'required|numeric|min:0.01',
-        ]);
-
+        $request->validate(['produto_id' => 'required|exists:produtos,id', 'quantidade' => 'required|numeric|min:0.01']);
         $produto = Produto::find($request->produto_id);
         $quantidade = $request->quantidade;
-
         DB::transaction(function () use ($ordemServico, $produto, $quantidade) {
-            $ordemServico->produtos()->create([
-                'produto_id'     => $produto->id,
-                'quantidade'     => $quantidade,
-                'preco_unitario' => $produto->preco_venda,
-                'subtotal'       => $quantidade * $produto->preco_venda,
-            ]);
+            $ordemServico->produtos()->create(['produto_id' => $produto->id, 'quantidade' => $quantidade, 'preco_unitario' => $produto->preco_venda, 'subtotal' => $quantidade * $produto->preco_venda]);
             $ordemServico->atualizarValores();
         });
-
         return redirect()->back()->with('success', 'Produto adicionado com sucesso!');
     }
-
-    /**
-     * Remove um produto de uma Ordem de Serviço.
-     */
     public function destroyProduto(OsProduto $osProduto)
     {
         $ordemServico = $osProduto->ordemServico;
@@ -180,37 +193,16 @@ class OrdemServicoController extends Controller
         });
         return redirect()->back()->with('success', 'Produto removido com sucesso!');
     }
-
-    /**
-     * Adiciona um serviço a uma Ordem de Serviço.
-     */
     public function storeServico(Request $request, OrdemServico $ordemServico)
     {
-        $request->validate([
-            'servico_id' => 'required|exists:produtos,id',
-            'tecnico_id' => 'nullable|exists:users,id',
-            'quantidade' => 'required|numeric|min:0.01',
-        ]);
-
+        $request->validate(['servico_id' => 'required|exists:produtos,id', 'tecnico_id' => 'nullable|exists:users,id', 'quantidade' => 'required|numeric|min:0.01']);
         $servico = Produto::find($request->servico_id);
-        
         DB::transaction(function () use ($ordemServico, $servico, $request) {
-            $ordemServico->servicos()->create([
-                'servico_id'     => $servico->id,
-                'tecnico_id'     => $request->tecnico_id,
-                'quantidade'     => $request->quantidade,
-                'preco_unitario' => $servico->preco_venda,
-                'subtotal'       => $request->quantidade * $servico->preco_venda,
-            ]);
+            $ordemServico->servicos()->create(['servico_id' => $servico->id, 'tecnico_id' => $request->tecnico_id, 'quantidade' => $request->quantidade, 'preco_unitario' => $servico->preco_venda, 'subtotal' => $request->quantidade * $servico->preco_venda]);
             $ordemServico->atualizarValores();
         });
-
         return redirect()->back()->with('success', 'Serviço adicionado com sucesso!');
     }
-
-    /**
-     * Remove um serviço de uma Ordem de Serviço.
-     */
     public function destroyServico(OsServico $osServico)
     {
         $ordemServico = $osServico->ordemServico;
@@ -220,14 +212,25 @@ class OrdemServicoController extends Controller
         });
         return redirect()->back()->with('success', 'Serviço removido com sucesso!');
     }
-
-    /**
-     * Remove uma Ordem de Serviço do banco de dados.
-     */
     public function destroy(OrdemServico $ordemServico)
     {
         $ordemServico->delete();
-        return redirect()->route('ordens-servico.index')
-                         ->with('success', 'Ordem de Serviço excluída com sucesso!');
+        return redirect()->route('ordens-servico.index')->with('success', 'Ordem de Serviço excluída com sucesso!');
+    }
+
+    // ... (storeEquipamentoModal - o método do modal que adicionamos) ...
+    public function storeEquipamentoModal(Request $request): JsonResponse
+    {
+        $validatedData = $request->validate([
+            'cliente_id' => 'required|exists:clientes,id',
+            'descricao' => 'required|string|max:255',
+            'numero_serie' => 'nullable|string|max:100',
+            'marca' => 'nullable|string|max:100',
+            'modelo' => 'nullable|string|max:100',
+        ]);
+        $validatedData['empresa_id'] = auth()->user()->empresa_id;
+        $equipamento = ClienteEquipamento::create($validatedData);
+        $equipamento->texto = $equipamento->descricao . ($equipamento->numero_serie ? " (SN: {$equipamento->numero_serie})" : "");
+        return response()->json($equipamento);
     }
 }
