@@ -4,12 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use App\Models\Scopes\EmpresaScope;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Notifications\Notifiable;
 
-class Cliente extends Model
+class Cliente extends Authenticatable
 {
-    use HasFactory;
+    use HasFactory, Notifiable;
 
     protected $table = 'clientes';
 
@@ -29,11 +31,22 @@ class Cliente extends Model
         'estado',
         'ie',               // <-- ADICIONE ESTA LINHA
         'codigo_municipio',
+        'password',
     ];
 
     protected $casts = [
         'data_nascimento' => 'date',
     ];
+
+    protected $hidden = [ // <-- 2. ADICIONE ESTE BLOCO
+        'password',
+        'remember_token',
+    ];
+
+    public function chamados(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(SuporteChamado::class, 'cliente_id');
+    }
 
     public function equipamentos(): HasMany
     {

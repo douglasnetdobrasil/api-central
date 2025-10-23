@@ -15,7 +15,7 @@
                             @method('PUT')
                         @endif
 
-                        {{-- DADOS DO CLIENTE --}}
+                        {{-- DADOS DO CLIENTE (Seu código original) --}}
                         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Dados Principais</h3>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
                             {{-- Linha 1 --}}
@@ -46,7 +46,7 @@
                             </div>
                         </div>
                         
-                        {{-- ENDEREÇO --}}
+                        {{-- ENDEREÇO (Seu código original) --}}
                         <h3 class="text-lg font-medium mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">Endereço</h3>
                         <div class="grid grid-cols-1 md:grid-cols-6 gap-6 mt-4">
                             <div class="md:col-span-1">
@@ -83,6 +83,31 @@
                             </div>
                         </div>
                         
+                        {{-- ====================================================== --}}
+                        {{-- ||||||||||||||||| NOVO BLOCO INSERIDO AQUI ||||||||||||||||| --}}
+                        {{-- ====================================================== --}}
+                        <h3 class="text-lg font-medium mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">Acesso ao Portal do Cliente</h3>
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Defina uma senha provisória para o cliente acessar o portal. O e-mail usado será o preenchido nos "Dados Principais".
+                        </p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                            <div class="md:col-span-1">
+                                <x-input-label for="password" value="Senha Provisória" />
+                                <x-text-input id="password" name="password" type="password" class="mt-1 block w-full" />
+                                <x-input-error :messages="$errors->get('password')" class="mt-2" />
+                                @if ($cliente->exists)
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Deixe em branco para não alterar a senha atual.</p>
+                                @endif
+                            </div>
+                            <div class="md:col-span-1">
+                                <x-input-label for="password_confirmation" value="Confirmar Senha" />
+                                <x-text-input id="password_confirmation" name="password_confirmation" type="password" class="mt-1 block w-full" />
+                            </div>
+                        </div>
+                        {{-- ================= FIM DO NOVO BLOCO ================= --}}
+
+
+                        {{-- BOTÕES DE AÇÃO (Seu código original) --}}
                         <div class="flex items-center justify-end mt-8">
                              <a href="{{ route('clientes.index') }}" class="text-sm text-gray-600 dark:text-gray-400 hover:underline mr-4">
                                 Cancelar
@@ -97,47 +122,52 @@
         </div>
     </div>
 
-    {{-- O SCRIPT NÃO PRECISA DE MUDANÇAS, APENAS O HTML ACIMA --}}
+    {{-- SCRIPT BUSCAR CNPJ (Seu código original) --}}
     <script>
     document.addEventListener('DOMContentLoaded', function () {
         const buscarBtn = document.getElementById('buscar-cnpj-btn');
         const cnpjInput = document.getElementById('cpf_cnpj');
 
-        buscarBtn.addEventListener('click', async function () {
-            const cnpj = cnpjInput.value.replace(/[^0-9]/g, '');
-            if (cnpj.length !== 14) {
-                alert('Por favor, digite um CNPJ válido com 14 dígitos.');
-                return;
-            }
+        if (buscarBtn) { // Adicionando verificação para evitar erros
+            buscarBtn.addEventListener('click', async function () {
+                const cnpj = cnpjInput.value.replace(/[^0-9]/g, '');
+                if (cnpj.length !== 14) {
+                    alert('Por favor, digite um CNPJ válido com 14 dígitos.');
+                    return;
+                }
 
-            buscarBtn.textContent = 'Buscando...';
-            buscarBtn.disabled = true;
+                buscarBtn.textContent = 'Buscando...';
+                buscarBtn.disabled = true;
 
-            try {
-                const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-                if (!response.ok) throw new Error('CNPJ não encontrado ou inválido.');
-                
-                const data = await response.json();
+                try {
+                    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+                    if (!response.ok) throw new Error('CNPJ não encontrado ou inválido.');
+                    
+                    const data = await response.json();
 
-                document.getElementById('nome').value = data.razao_social || '';
-                document.getElementById('telefone').value = data.ddd_telefone_1 || '';
-                document.getElementById('cep').value = data.cep || '';
-                document.getElementById('logradouro').value = data.logradouro || '';
-                document.getElementById('numero').value = data.numero || '';
-                document.getElementById('complemento').value = data.complemento || '';
-                document.getElementById('bairro').value = data.bairro || '';
-                document.getElementById('cidade').value = data.municipio || '';
-                document.getElementById('estado').value = data.uf || '';
-                document.getElementById('codigo_municipio').value = data.codigo_municipio_ibge || '';
+                    document.getElementById('nome').value = data.razao_social || '';
+                    document.getElementById('telefone').value = data.ddd_telefone_1 || '';
+                    document.getElementById('cep').value = data.cep || '';
+                    document.getElementById('logradouro').value = data.logradouro || '';
+                    document.getElementById('numero').value = data.numero || '';
+                    document.getElementById('complemento').value = data.complemento || '';
+                    document.getElementById('bairro').value = data.bairro || '';
+                    document.getElementById('cidade').value = data.municipio || '';
+                    document.getElementById('estado').value = data.uf || '';
+                    document.getElementById('codigo_municipio').value = data.codigo_municipio_ibge || '';
+                    // Preenchendo o e-mail se ele vier
+                    if(data.email) {
+                         document.getElementById('email').value = data.email;
+                    }
 
-                alert('Dados do CNPJ preenchidos com sucesso!');
-            } catch (error) {
-                alert(`Erro ao buscar CNPJ: ${error.message}`);
-            } finally {
-                buscarBtn.textContent = 'Buscar';
-                buscarBtn.disabled = false;
-            }
-        });
+                } catch (error) {
+                    alert(`Erro ao buscar CNPJ: ${error.message}`);
+                } finally {
+                    buscarBtn.textContent = 'Buscar';
+                    buscarBtn.disabled = false;
+                }
+            });
+        }
     });
     </script>
 </x-app-layout>

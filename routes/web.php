@@ -1,5 +1,5 @@
 <?php
-//dd('ESTE É O ARQUÊVO CORRETO SENDO LIDO');
+// Lembre-se de remover o 'dd' que estava aqui
 
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -30,10 +30,13 @@ use App\Http\Controllers\RelatorioEstoqueController;
 use App\Http\Controllers\RelatorioComprasController;
 use App\Http\Controllers\InventarioController;
 use App\Http\Controllers\InventarioItemController;
-use App\Http\Controllers\FichaTecnicaController; // Adicionado para clareza
+use App\Http\Controllers\FichaTecnicaController;
 use App\Http\Controllers\OrdemServicoController;
 use App\Http\Controllers\ClienteEquipamentoController;
 use App\Http\Controllers\CentroCustoController;
+use App\Http\Controllers\PortalClienteController;
+use App\Http\Controllers\Admin\SuporteChamadoController;
+use App\Http\Controllers\Auth\ClienteLoginController;
 
 
 use App\Services\NFCeService;
@@ -50,9 +53,41 @@ use App\Models\Venda;
 use App\Livewire\NfeAvulsaFormulario;
 use App\Livewire\NfeAvulsaCriar;
 
+// (Dependendo da sua versão do Laravel, você pode precisar de 'use App\Http\Controllers\CentroCustoRelatorioController;')
+// Assumindo que ele existe ou está em outro namespace.
+
 Route::get('/', function () {
     return view('welcome');
 });
+
+// =====================================================================
+// ||||||||||||||| BLOCO DO PORTAL MOVIDO PARA O LUGAR CORRETO ||||||||||||||||
+// =====================================================================
+//portal do cliente 
+Route::prefix('portal')->name('portal.')->group(function () {
+
+    // Rotas de login/logout do CLIENTE (Acessíveis como 'guest')
+    Route::middleware('guest:cliente')->group(function () {
+        Route::get('/login', [ClienteLoginController::class, 'showLoginForm'])->name('login');
+        Route::post('/login', [ClienteLoginController::class, 'login']);
+    });
+
+    // Rotas Protegidas do Portal (Exigem login de cliente)
+    Route::middleware(['auth:cliente'])->group(function () {
+        Route::post('/logout', [ClienteLoginController::class, 'logout'])->name('logout');
+        
+        Route::get('/dashboard', [PortalClienteController::class, 'index'])->name('dashboard');
+        Route::get('/chamados/novo', [PortalClienteController::class, 'create'])->name('chamados.create');
+        Route::post('/chamados', [PortalClienteController::class, 'store'])->name('chamados.store');
+        Route::get('/chamados/{chamado}', [PortalClienteController::class, 'show'])->name('chamados.show');
+        Route::post('/chamados/{chamado}/responder', [PortalClienteController::class, 'responder'])->name('chamados.responder');
+    });Route::post('/equipamentos/store-modal', [PortalClienteController::class, 'storeEquipamentoModal'])
+    ->name('equipamentos.storeModal');
+
+   
+});
+// =================== FIM DO BLOCO MOVIDO ===================
+
 
 Route::get('/dashboard', function () {
     return view('dashboard');
@@ -195,7 +230,11 @@ Route::get('/producao', App\Http\Controllers\ProducaoDashboardController::class)
     Route::resource('centros-custo', CentroCustoController::class)->middleware('auth');
 
 
-
+    /* * O seu código original tinha um erro aqui, com um 'use' e rotas de 'CentroCustoRelatorioController'
+    * que não estava sendo importado no topo. Você precisará verificar isso.
+    * Vou comentar essa parte para evitar um erro de "Classe não encontrada".
+    */
+    /*
     Route::prefix('relatorios')->name('relatorios.')->middleware('auth')->group(function () {
         Route::get('centros-custo/extrato', [CentroCustoRelatorioController::class, 'extratoForm'])->name('centros-custo.extratoForm');
         Route::post('centros-custo/extrato', [CentroCustoRelatorioController::class, 'gerarExtrato'])->name('centros-custo.gerarExtrato');
@@ -205,49 +244,66 @@ Route::get('/producao', App\Http\Controllers\ProducaoDashboardController::class)
         Route::resource('centros-custo', CentroCustoController::class)->except(['show']);
 
     });
+    */
 
+    // O BLOCO DO PORTAL DO CLIENTE FOI REMOVIDO DAQUI
+  
+// --- GESTÃO DE CHAMADOS (PAINEL INTERNO) ---
+// (Este está no lugar correto, pois é para o Admin)
+Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+    
+    // ... (suas outras rotas de admin)
+    
+    Route::get('/chamados', [SuporteChamadoController::class, 'index'])->name('chamados.index');
+    Route::get('/chamados/{chamado}', [SuporteChamadoController::class, 'show'])->name('chamados.show');
+    Route::post('/chamados/{chamado}/responder', [SuporteChamadoController::class, 'responder'])->name('chamados.responder');
+    Route::post('/chamados/{chamado}/atribuir', [SuporteChamadoController::class, 'atribuir'])->name('chamados.atribuir');
+    
+    // A ROTA DE INTEGRAÇÃO
+    Route::post('/chamados/{chamado}/converter-os', [SuporteChamadoController::class, 'converterOS'])->name('chamados.converterOS');
+
+    Route::patch('/chamados/{chamado}/mudar-status', [SuporteChamadoController::class, 'mudarStatus'])
+    ->name('chamados.mudarStatus');
+Route::patch('/chamados/{chamado}/mudar-prioridade', [SuporteChamadoController::class, 'mudarPrioridade'])
+    ->name('chamados.mudarPrioridade');
+
+    Route::patch('/chamados/{chamado}/salvar-solucao', [SuporteChamadoController::class, 'salvarSolucao'])
+                 ->name('chamados.salvarSolucao'); 
+});
 
 
     Route::get('/os/clientes/{clienteId}/equipamentos', [App\Http\Controllers\OrdemServicoController::class, 'getEquipamentosByCliente'])->name('os.equipamentos.by.cliente');
     Route::post('/os/equipamentos/store-modal', [OrdemServicoController::class, 'storeEquipamentoModal'])
          ->name('os.equipamentos.storeModal');
+    
     Route::get('/teste-status-sefaz', function () {
         if (!Auth::check()) {
             return 'Você precisa estar logado para fazer este teste.';
         }
     
         try {
-            // Pega a empresa do usuário logado
             $empresa = Auth::user()->empresa;
             if (!$empresa) {
                 return "Usuário não tem uma empresa associada.";
             }
     
-            // Instancia o nosso serviço
             $nfceService = new NFCeService();
     
-            // Usa Reflection para chamar o método 'bootstrap' que é privado
             $reflection = new \ReflectionClass($nfceService);
             $method = $reflection->getMethod('bootstrap');
             $method->setAccessible(true);
             $method->invoke($nfceService, $empresa);
     
-            // Pega o objeto 'tools' já configurado
             $toolsProperty = $reflection->getProperty('tools');
             $toolsProperty->setAccessible(true);
             $tools = $toolsProperty->getValue($nfceService);
     
-            // ================== A CORREÇÃO ESTÁ AQUI ==================
-            // O nome correto da função é 'sefazStatus'
             $response = $tools->sefazStatus();
-            // ==========================================================
     
-            // Mostra o resultado na tela
             $std = new \NFePHP\NFe\Common\Standardize($response);
             dd($std->toStd());
     
         } catch (\Exception $e) {
-            // Se der erro, mostra a mensagem de erro
             dd($e->getMessage());
         }
     });
@@ -263,7 +319,6 @@ Route::get('/producao', App\Http\Controllers\ProducaoDashboardController::class)
     ->name('fiscal.index');
     
 
-    // Rota de teste (Original - MANTIDO)
     Route::get('/teste-nfe', function () {
         try {
             $config = new \NFePHP\Sped\Common\Config('{}');

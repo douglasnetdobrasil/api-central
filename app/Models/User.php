@@ -50,6 +50,11 @@ class User extends Authenticatable
         ];
     }
 
+    public function chamadosAtribuidos(): \Illuminate\Database\Eloquent\Relations\HasMany
+{
+    return $this->hasMany(SuporteChamado::class, 'tecnico_atribuido_id');
+}
+
     public function empresa()
     {
         return $this->belongsTo(Empresa::class);

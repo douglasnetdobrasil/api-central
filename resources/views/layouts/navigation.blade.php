@@ -318,6 +318,11 @@
                         {{ __('Ordem de Serviço (OS)') }}
                     </x-dropdown-link>
                 @endcan
+                @can('ver-ordem-servico')
+                    <x-dropdown-link :href="route('admin.chamados.index')">
+                        {{ __('Suporte - Chamados') }}
+                    </x-dropdown-link>
+                @endcan
             </x-slot>
         </x-dropdown>
     </div>

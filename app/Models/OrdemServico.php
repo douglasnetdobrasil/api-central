@@ -91,7 +91,10 @@ class OrdemServico extends Model
     {
         return $this->belongsTo(ClienteEquipamento::class, 'cliente_equipamento_id');
     }
-
+    public function chamado(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(SuporteChamado::class, 'suporte_chamado_id');
+    }
     // >> NOVO RELACIONAMENTO: Fotos
     public function fotos(): HasMany
     {

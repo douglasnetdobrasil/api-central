@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Cliente; // <-- A CORREÇÃO ESTÁ AQUI
+use App\Models\Cliente;
 use Illuminate\Http\Request;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory; // (Estes 'use' não são necessários, mas não causam mal)
+use Illuminate\Database\Eloquent\Model; // (Estes 'use' não são necessários)
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash; // <-- IMPORTANTE: Importa o 'Hash'
 
 class ClienteController extends Controller
 {
@@ -44,9 +45,8 @@ class ClienteController extends Controller
      */
     public function create()
     {
-        // Precisamos passar um objeto vazio para o formulário não dar erro de variável indefinida
         $cliente = new Cliente();
-        return view('clientes.form', compact('cliente')); // ou 'admin.clientes.form' dependendo da sua estrutura
+        return view('clientes.form', compact('cliente'));
     }
 
     /**
@@ -54,11 +54,14 @@ class ClienteController extends Controller
      */
     public function store(Request $request)
     {
+        // ==========================================================
+        // ||||||||||||||||||| ATUALIZAÇÃO DE VALIDAÇÃO |||||||||||||||||||
+        // ==========================================================
         $validatedData = $request->validate([
             'nome' => 'required|string|max:255',
             'cpf_cnpj' => 'nullable|string|max:20|unique:clientes,cpf_cnpj',
             'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255',
+            'email' => 'nullable|email|max:255|unique:clientes,email', // <-- REGRA DE 'UNIQUE' ADICIONADA
             'cep' => 'nullable|string|max:10',
             'logradouro' => 'nullable|string|max:255',
             'numero' => 'nullable|string|max:20',
@@ -67,13 +70,22 @@ class ClienteController extends Controller
             'cidade' => 'nullable|string|max:255',
             'estado' => 'nullable|string|max:2',
             'ie' => 'nullable|string|max:20',
-    'codigo_municipio' => 'nullable|string|max:7',
+            'codigo_municipio' => 'nullable|string|max:7',
+            'password' => 'nullable|string|min:6|confirmed', // <-- REGRAS DE SENHA ADICIONADAS
         ]);
     
-        // ===== A LINHA DA CORREÇÃO ESTÁ AQUI =====
         $validatedData['empresa_id'] = Auth::user()->empresa_id;
-        // ==========================================
     
+        // ==========================================================
+        // ||||||||||||||||| LÓGICA DE HASH ADICIONADA ||||||||||||||||||
+        // ==========================================================
+        if ($request->filled('password')) {
+            $validatedData['password'] = Hash::make($request->password);
+        } else {
+            // Garante que não salve uma senha nula se o campo estiver vazio
+            unset($validatedData['password']); 
+        }
+
         Cliente::create($validatedData);
     
         return redirect()->route('clientes.index')->with('success', 'Cliente cadastrado com sucesso!');
@@ -93,7 +105,6 @@ class ClienteController extends Controller
      */
     public function edit(Cliente $cliente)
     {
-        // Envia o cliente carregado do banco de dados para o formulário
         return view('clientes.form', compact('cliente'));
     }
 
@@ -102,11 +113,14 @@ class ClienteController extends Controller
      */
     public function update(Request $request, Cliente $cliente)
     {
+        // ==========================================================
+        // ||||||||||||||||||| ATUALIZAÇÃO DE VALIDAÇÃO |||||||||||||||||||
+        // ==========================================================
         $validatedData = $request->validate([
             'nome' => 'required|string|max:255',
-            'cpf_cnpj' => 'nullable|string|max:20|unique:clientes,cpf_cnpj,' . $cliente->id,
+            'cpf_cnpj' => 'nullable|string|max:20|unique:clientes,cpf_cnpj,' . $cliente->id, // Ignora o próprio ID
             'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255',
+            'email' => 'nullable|email|max:255|unique:clientes,email,' . $cliente->id, // Ignora o próprio ID
             'cep' => 'nullable|string|max:10',
             'logradouro' => 'nullable|string|max:255',
             'numero' => 'nullable|string|max:20',
@@ -115,22 +129,33 @@ class ClienteController extends Controller
             'cidade' => 'nullable|string|max:255',
             'estado' => 'nullable|string|max:2',
             'ie' => 'nullable|string|max:20',
-    'codigo_municipio' => 'nullable|string|max:7',
+            'codigo_municipio' => 'nullable|string|max:7',
+            'password' => 'nullable|string|min:6|confirmed', // <-- REGRAS DE SENHA ADICIONADAS
         ]);
     
+        // ==========================================================
+        // ||||||||||||||||| LÓGICA DE HASH ADICIONADA ||||||||||||||||||
+        // ==========================================================
+        if ($request->filled('password')) {
+            $validatedData['password'] = Hash::make($request->password);
+        } else {
+            // Remove a chave 'password' para não sobrescrever a senha existente com 'null'
+            unset($validatedData['password']);
+        }
+
+        // A linha $validatedData['empresa_id'] = Auth::user()->empresa_id; foi removida daqui
+        // pois não é seguro ou necessário alterar o 'empresa_id' de um cliente existente.
+        
         $cliente->update($validatedData);
-        $validatedData['empresa_id'] = Auth::user()->empresa_id;
     
         return redirect()->route('clientes.index')->with('success', 'Cliente atualizado com sucesso!');
     }
+    
     /**
      * Remove the specified resource from storage.
      */
     public function destroy(Cliente $cliente)
     {
-        // Adicione aqui uma verificação se o cliente tem vendas associadas antes de apagar
-        // Exemplo: if ($cliente->vendas()->count() > 0) { ... }
-        
         $cliente->delete();
         return redirect()->route('clientes.index')->with('success', 'Cliente removido com sucesso!');
     }
