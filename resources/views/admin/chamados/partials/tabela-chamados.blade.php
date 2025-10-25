@@ -9,8 +9,6 @@
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Título</th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Técnico</th>
-                {{-- REMOVIDA COLUNA "Aberto em" --}}
-                {{-- <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Aberto em</th> --}}
                 {{-- ========================================================== --}}
                 {{-- ||||||||||||||||||| COLUNA TEMPO DE ESPERA ADICIONADA ||||||||||||||||| --}}
                 {{-- ========================================================== --}}
@@ -36,14 +34,11 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ Str::limit($chamado->titulo, 35) }}</td>
                     {{-- Status --}}
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        {{-- ========================================================== --}}
-                        {{-- |||||||||||||| INDICADOR DE NOVA RESPOSTA ADICIONADO |||||||||||||| --}}
-                        {{-- ========================================================== --}}
+                        {{-- INDICADOR DE NOVA RESPOSTA ADICIONADO --}}
                         @if ($chamado->status == 'Aguardando Atendimento')
                             <span class="mr-1.5 inline-flex items-center justify-center h-2 w-2 rounded-full bg-blue-500" title="Cliente respondeu"></span>
                         @endif
                         <span class="px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full
-                            {{-- ... (lógica @switch de cores do status - sem alteração) ... --}}
                             @switch($chamado->status)
                                 @case('Aberto')
                                 @case('Aguardando Atendimento')
@@ -54,6 +49,8 @@
                                 @case('Resolvido Online')
                                 @case('Convertido em OS')
                                     bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 @break
+                                @case('Fechado')
+                                    bg-gray-400 text-gray-800 dark:bg-gray-600 dark:text-gray-200 @break
                                 @default
                                     bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300
                             @endswitch
@@ -63,24 +60,34 @@
                     </td>
                     {{-- Técnico --}}
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $chamado->tecnico->name ?? '-' }}</td>
-                    {{-- REMOVIDA CÉLULA "Aberto em" --}}
-                    {{-- <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $chamado->created_at->format('d/m/Y H:i') }}</td> --}}
-                    {{-- ========================================================== --}}
-                    {{-- ||||||||||||||||| CÉLULA TEMPO DE ESPERA ADICIONADA ||||||||||||||||| --}}
-                    {{-- ========================================================== --}}
-                    {{-- Calcula o tempo com base no 'created_at' se for novo, senão usa 'updated_at' --}}
+                    
+                    {{-- CÉLULA TEMPO DE ESPERA (Parar de Contar para status finais) --}}
                     @php
-                        $tempoReferencia = ($chamado->status == 'Aberto' && !$chamado->tecnico_atribuido_id) ? $chamado->created_at : $chamado->updated_at;
-                        $diff = $tempoReferencia->diffInHours(now());
-                        $corTempo = $diff >= 48 ? 'text-red-600 dark:text-red-400 font-semibold' : ($diff >= 8 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400');
+                        $statusFinais = ['Fechado', 'Convertido em OS', 'Resolvido Online'];
                     @endphp
-                    <td class="px-6 py-4 whitespace-nowrap text-sm {{ $corTempo }}">
-                        {{ $tempoReferencia->diffForHumans() }}
+
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        @if(in_array($chamado->status, $statusFinais))
+                            <span class="text-gray-400 dark:text-gray-500">- Finalizado -</span>
+                        @else
+                            @php
+                                $tempoReferencia = ($chamado->status == 'Aberto' && !$chamado->tecnico_atribuido_id) ? $chamado->created_at : $chamado->updated_at;
+                                $diff = $tempoReferencia->diffInHours(now());
+                                $corTempo = $diff >= 48 ? 'text-red-600 dark:text-red-400 font-semibold' : ($diff >= 8 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400');
+                            @endphp
+                            <span class="{{ $corTempo }}">
+                                {{ $tempoReferencia->diffForHumans() }}
+                            </span>
+                        @endif
                     </td>
-                    {{-- Ações --}}
+                    
+                    {{-- Ações (Mudar de Atender para Visualizar) --}}
+                    @php
+                         $acaoTexto = in_array($chamado->status, ['Fechado', 'Convertido em OS']) ? 'Visualizar' : 'Atender';
+                    @endphp
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <a href="{{ route('admin.chamados.show', $chamado) }}" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900">
-                            Atender
+                            {{ $acaoTexto }}
                         </a>
                     </td>
                 </tr>

@@ -43,7 +43,8 @@ class OrdemServico extends Model
         'valor_desconto',
         'valor_total',
         'venda_id',
-        'cliente_equipamento_id', // Importante para o futuro
+        'cliente_equipamento_id', 
+        'suporte_chamado_id',
     ];
 
     protected $casts = [
@@ -94,6 +95,12 @@ class OrdemServico extends Model
     public function chamado(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(SuporteChamado::class, 'suporte_chamado_id');
+    }
+    public function chamadoDeOrigem(): BelongsTo
+    {
+        // Garante que o Laravel saiba onde encontrar a classe,
+        // mesmo que haja conflito de nomes ou falta de 'use'.
+        return $this->belongsTo(\App\Models\SuporteChamado::class, 'suporte_chamado_id');
     }
     // >> NOVO RELACIONAMENTO: Fotos
     public function fotos(): HasMany

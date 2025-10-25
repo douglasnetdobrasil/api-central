@@ -70,23 +70,20 @@
                     </div>
                 @endif
 
-                {{-- BLOCO DE AÇÕES RÁPIDAS --}}
-                {{-- ========================================================== --}}
-                {{-- ||||||||||||||||||| BLOCO DE SOLUÇÃO ADICIONADO ||||||||||||||||| --}}
-                {{-- ========================================================== --}}
+                {{-- BLOCO DE SOLUÇÃO APLICADA --}}
                 <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 border-b pb-2 dark:border-gray-700">Solução Aplicada</h3>
-                    <form action="{{ route('admin.chamados.salvarSolucao', $chamado) }}" method="POST"> {{-- ROTA NOVA --}}
+                    <form action="{{ route('admin.chamados.salvarSolucao', $chamado) }}" method="POST">
                         @csrf
                         @method('PATCH')
                         <textarea name="solucao_aplicada" rows="6" 
                                   class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm" 
                                   placeholder="Descreva a solução aplicada para referência futura..."
-                                  {{ in_array($chamado->status, ['Fechado']) ? 'disabled' : '' }} 
+                                  {{ in_array($chamado->status, ['Fechado', 'Convertido em OS']) ? 'disabled' : '' }} 
                                   >{{ old('solucao_aplicada', $chamado->solucao_aplicada) }}</textarea>
                         <x-input-error :messages="$errors->get('solucao_aplicada')" class="mt-2" />
                         
-                        @if (!in_array($chamado->status, ['Fechado']))
+                        @if (!in_array($chamado->status, ['Fechado', 'Convertido em OS']))
                         <div class="mt-4 flex justify-end">
                             <x-primary-button>Salvar Solução</x-primary-button>
                         </div>
@@ -94,67 +91,151 @@
                     </form>
                 </div>
 
+                {{-- BLOCO DE AÇÕES RÁPIDAS --}}
                 <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 border-b pb-2 dark:border-gray-700">Ações</h3>
                     <div class="space-y-3">
-                        {{-- Atribuir a mim --}}
-                        @if(!$chamado->tecnico_atribuido_id && $chamado->status == 'Aberto')
-                            <form action="{{ route('admin.chamados.atribuir', $chamado) }}" method="POST">
+                        
+                         {{-- ** INÍCIO: BLOCO DE CONTROLE PARA CHAMADOS ATIVOS ** --}}
+                        @if (!in_array($chamado->status, ['Fechado', 'Convertido em OS']))
+                            
+                            {{-- Atribuir a mim --}}
+                            @if(!$chamado->tecnico_atribuido_id && $chamado->status == 'Aberto')
+                                <form action="{{ route('admin.chamados.atribuir', $chamado) }}" method="POST">
+                                    @csrf
+                                    <x-secondary-button type="submit" class="w-full justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                        Atribuir a mim
+                                    </x-secondary-button>
+                                </form>
+                            @endif
+
+                            {{-- Mudar Status (Formulário) --}}
+                            <form action="{{ route('admin.chamados.mudarStatus', $chamado) }}" method="POST"> 
                                 @csrf
-                                <x-secondary-button type="submit" class="w-full justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                    Atribuir a mim
-                                </x-secondary-button>
+                                @method('PATCH')
+                                <div class="flex items-center gap-2">
+                                    <select name="status" class="flex-grow block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                                        @php $statusOptions = ['Aberto', 'Em Atendimento', 'Aguardando Cliente', 'Aguardando Atendimento', 'Resolvido Online', 'Fechado']; @endphp
+                                        @foreach($statusOptions as $status)
+                                            <option value="{{ $status }}" {{ $chamado->status == $status ? 'selected' : '' }}>{{ $status }}</option>
+                                        @endforeach
+                                    </select>
+                                    <x-secondary-button type="submit" class="flex-shrink-0" title="Atualizar Status">OK</x-secondary-button>
+                                </div>
                             </form>
-                        @endif
 
-                         {{-- Mudar Status (Formulário) --}}
-                        <form action="{{ route('admin.chamados.mudarStatus', $chamado) }}" method="POST"> {{-- ROTA NOVA --}}
-                            @csrf
-                            @method('PATCH')
-                            <div class="flex items-center gap-2">
-                                <select name="status" class="flex-grow block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
-                                    @php $statusOptions = ['Aberto', 'Em Atendimento', 'Aguardando Cliente', 'Aguardando Atendimento', 'Resolvido Online', 'Fechado']; @endphp
-                                    @foreach($statusOptions as $status)
-                                        <option value="{{ $status }}" {{ $chamado->status == $status ? 'selected' : '' }}>{{ $status }}</option>
-                                    @endforeach
-                                </select>
-                                <x-secondary-button type="submit" class="flex-shrink-0" title="Atualizar Status">OK</x-secondary-button>
-                            </div>
-                        </form>
-
-                        {{-- Mudar Prioridade (Formulário) --}}
-                        <form action="{{ route('admin.chamados.mudarPrioridade', $chamado) }}" method="POST"> {{-- ROTA NOVA --}}
-                             @csrf
-                             @method('PATCH')
-                            <div class="flex items-center gap-2">
-                                <select name="prioridade" class="flex-grow block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
-                                     @php $prioridadeOptions = ['Baixa', 'Média', 'Alta', 'Urgente']; @endphp
-                                    @foreach($prioridadeOptions as $p)
-                                        <option value="{{ $p }}" {{ $chamado->prioridade == $p ? 'selected' : '' }}>{{ $p }}</option>
-                                    @endforeach
-                                </select>
-                                <x-secondary-button type="submit" class="flex-shrink-0" title="Atualizar Prioridade">OK</x-secondary-button>
-                            </div>
-                        </form>
-
-                        {{-- Converter em OS --}}
-                        @if(!$chamado->ordem_servico_id && !in_array($chamado->status, ['Fechado', 'Resolvido Online']))
-                            <form action="{{ route('admin.chamados.converterOS', $chamado) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja converter este chamado em uma Ordem de Serviço?')">
-                                @csrf
-                                <x-primary-button type="submit" class="w-full justify-center bg-green-600 hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:ring-green-500">
-                                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-                                    Converter em OS
-                                </x-primary-button>
+                            {{-- Mudar Prioridade (Formulário) --}}
+                            <form action="{{ route('admin.chamados.mudarPrioridade', $chamado) }}" method="POST"> 
+                                 @csrf
+                                 @method('PATCH')
+                                <div class="flex items-center gap-2">
+                                    <select name="prioridade" class="flex-grow block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                                         @php $prioridadeOptions = ['Baixa', 'Média', 'Alta', 'Urgente']; @endphp
+                                        @foreach($prioridadeOptions as $p)
+                                            <option value="{{ $p }}" {{ $chamado->prioridade == $p ? 'selected' : '' }}>{{ $p }}</option>
+                                        @endforeach
+                                    </select>
+                                    <x-secondary-button type="submit" class="flex-shrink-0" title="Atualizar Prioridade">OK</x-secondary-button>
+                                </div>
                             </form>
-                        @elseif($chamado->ordem_servico_id)
+
+                            {{-- Reatribuir --}}
+                            @if($chamado->tecnico_atribuido_id && !in_array($chamado->status, ['Fechado', 'Resolvido Online', 'Convertido em OS']))
+                                <form action="{{ route('admin.chamados.reatribuir', $chamado) }}" method="POST"> 
+                                    @csrf
+                                    @method('PATCH')
+                                    <label for="novo_tecnico_id" class="block font-medium text-sm text-gray-700 dark:text-gray-300 mb-1">Reatribuir para:</label>
+                                    <div class="flex items-center gap-2">
+                                        <select name="novo_tecnico_id" id="novo_tecnico_id" class="flex-grow block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm" required>
+                                            <option value="">Selecione...</option>
+                                            {{-- $tecnicosDisponiveis vem do Controller --}}
+                                            @foreach($tecnicosDisponiveis ?? [] as $tec)
+                                                {{-- Não permite reatribuir para si mesmo --}}
+                                                @if($tec->id !== $chamado->tecnico_atribuido_id)
+                                                    <option value="{{ $tec->id }}">{{ $tec->name }}</option>
+                                                @endif
+                                            @endforeach
+                                        </select>
+                                        <x-secondary-button type="submit" class="flex-shrink-0" title="Reatribuir Chamado">OK</x-secondary-button>
+                                    </div>
+                                    <x-input-error :messages="$errors->get('novo_tecnico_id')" class="mt-2" />
+                                </form>
+                            @endif
+
+                            {{-- Converter em OS --}}
+                            @if(!$chamado->ordem_servico_id && !in_array($chamado->status, ['Fechado', 'Resolvido Online', 'Convertido em OS']))
+                                <form action="{{ route('admin.chamados.converterOS', $chamado) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja converter este chamado em uma Ordem de Serviço?')">
+                                    @csrf
+                                    <x-primary-button type="submit" class="w-full justify-center bg-green-600 hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:ring-green-500">
+                                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                                        Converter em OS
+                                    </x-primary-button>
+                                </form>
+                            @endif
+                        
+                        @endif {{-- FIM do @if de verificação de status Fechado/Convertido --}}
+
+                        {{-- Ver OS (Sempre visível se já convertido) --}}
+                        @if($chamado->ordem_servico_id)
                              <a href="{{ route('ordens-servico.edit', $chamado->ordem_servico_id) }}" target="_blank"
                                 class="w-full inline-flex justify-center items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150">
                                 Ver OS #{{ $chamado->ordem_servico_id }}
                             </a>
                         @endif
+
+                         {{-- Mensagem de Chamado Finalizado --}}
+                        @if (in_array($chamado->status, ['Fechado', 'Convertido em OS']))
+                            <div class="p-3 text-sm text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/50 rounded-lg text-center font-medium border border-red-300 dark:border-red-700">
+                                Chamado Finalizado ({{ $chamado->status }}). Não é possível realizar modificações. Se necessário, abra um novo chamado.
+                            </div>
+                        @endif
+                        
                     </div>
                 </div>
+
+                {{-- ====================================================== --}}
+                {{-- |||||||||||||| BLOCO DA BASE DE CONHECIMENTO (KB) |||||||||||||| --}}
+                {{-- ====================================================== --}}
+                @if ($historicoSolucoes->count())
+                <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
+                    <h3 class="text-lg font-medium text-purple-700 dark:text-purple-400 mb-4 border-b pb-2 dark:border-gray-700">
+                        Base de Conhecimento (KB)
+                    </h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                        Últimas soluções aplicadas para este {{ $chamado->cliente_equipamento_id ? 'equipamento' : 'cliente' }}.
+                    </p>
+                    <div class="space-y-4 max-h-96 overflow-y-auto pr-2">
+                        @foreach ($historicoSolucoes as $solucao)
+                        <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md border border-gray-200 dark:border-gray-600">
+                            <div class="flex justify-between items-start mb-2">
+                                <a href="{{ route('admin.chamados.show', $solucao->id) }}" target="_blank" class="font-semibold text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+                                    Chamado #{{ $solucao->protocolo }}
+                                </a>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ $solucao->updated_at->format('d/m/Y') }}</span>
+                            </div>
+                            <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-4">
+                                {{ $solucao->solucao_aplicada }}
+                            </p>
+                             <a href="{{ route('admin.chamados.show', $solucao->id) }}" target="_blank" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline mt-1 inline-block">
+                                Ver Chamado Completo
+                            </a>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
+                @else
+                 {{-- Mensagem se não houver soluções --}}
+                <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 border-b pb-2 dark:border-gray-700">
+                        Base de Conhecimento (KB)
+                    </h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        Nenhuma solução anterior registrada para este {{ $chamado->cliente_equipamento_id ? 'equipamento' : 'cliente' }} que possa ser usada como Base de Conhecimento.
+                    </p>
+                </div>
+                @endif
+
 
             </div>
 
@@ -263,7 +344,7 @@
                  @if (!in_array($chamado->status, ['Fechado', 'Resolvido Online', 'Convertido em OS']))
                     <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6">
                          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Responder Chamado</h3>
-                        <form action="{{ route('admin.chamados.responder', $chamado) }}" method="POST" enctype="multipart/form-data"> {{-- Adicionado enctype --}}
+                        <form action="{{ route('admin.chamados.responder', $chamado) }}" method="POST" enctype="multipart/form-data">
                             @csrf
                             <textarea name="mensagem" rows="5" class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm" placeholder="Escreva sua resposta para o cliente ou uma nota interna..." required></textarea>
                             <x-input-error :messages="$errors->get('mensagem')" class="mt-2" />

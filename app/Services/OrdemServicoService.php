@@ -22,6 +22,9 @@ class OrdemServicoService
             'equipamento' => $dados['equipamento'] ?? 'Não informado',
             'numero_serie' => $dados['numero_serie'] ?? null,
             
+            // ADICIONADO: Campo de rastreamento do Chamado
+            'suporte_chamado_id' => $dados['suporte_chamado_id'] ?? null, 
+            
             'empresa_id' => $usuarioLogado->empresa_id,
             'data_entrada' => now(),
         ];
@@ -34,13 +37,17 @@ class OrdemServicoService
                 $dadosParaCriar['numero_serie'] = $equipamento->numero_serie;
             }
         }
+        
+        // Se a origem do chamado existir, garantimos que ela será usada no histórico.
+        $origemChamado = $dados['origem_chamado'] ?? null;
 
         $ordemServico = OrdemServico::create($dadosParaCriar);
 
-        // Cria o histórico inicial (como você já faz)
+        // Cria o histórico inicial (ajustado para usar a variável local $origemChamado)
         $ordemServico->historico()->create([
+            
             'user_id' => $usuarioLogado->id,
-            'descricao' => "OS Criada com status '{$ordemServico->status}'. " . ($dados['origem_chamado'] ?? ''),
+            'descricao' => "OS Criada com status '{$ordemServico->status}'. " . ($origemChamado ?? ''),
         ]);
         
         return $ordemServico;

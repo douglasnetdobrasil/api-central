@@ -175,7 +175,7 @@ Route::delete('/os-servicos/{osServico}', [OrdemServicoController::class, 'destr
     // Utilitários
     Route::get('/consulta/cnpj/{cnpj}', [UtilController::class, 'consultarCnpj'])->name('consulta.cnpj');
     
-    // Admin (Novas Rotas)
+    // Admin
     Route::prefix('admin')->name('admin.')->middleware(['can:acessar-admin'])->group(function () {
         Route::resource('perfis-fiscais', PerfilFiscalController::class);
         Route::get('configuracoes', [ConfiguracaoController::class, 'index'])->name('configuracoes.index');
@@ -252,23 +252,30 @@ Route::get('/producao', App\Http\Controllers\ProducaoDashboardController::class)
 // (Este está no lugar correto, pois é para o Admin)
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
     
-    // ... (suas outras rotas de admin)
-    
+    // Rotas de criação e salvamento (ADICIONADAS/RESTAURADAS AQUI)
+    Route::get('/chamados/novo', [SuporteChamadoController::class, 'create'])->name('chamados.create');
+    Route::post('/chamados', [SuporteChamadoController::class, 'store'])->name('chamados.store');
+
+    // Rotas de listagem e atendimento
     Route::get('/chamados', [SuporteChamadoController::class, 'index'])->name('chamados.index');
     Route::get('/chamados/{chamado}', [SuporteChamadoController::class, 'show'])->name('chamados.show');
     Route::post('/chamados/{chamado}/responder', [SuporteChamadoController::class, 'responder'])->name('chamados.responder');
     Route::post('/chamados/{chamado}/atribuir', [SuporteChamadoController::class, 'atribuir'])->name('chamados.atribuir');
     
-    // A ROTA DE INTEGRAÇÃO
+    // Rotas de Ação
     Route::post('/chamados/{chamado}/converter-os', [SuporteChamadoController::class, 'converterOS'])->name('chamados.converterOS');
 
     Route::patch('/chamados/{chamado}/mudar-status', [SuporteChamadoController::class, 'mudarStatus'])
     ->name('chamados.mudarStatus');
-Route::patch('/chamados/{chamado}/mudar-prioridade', [SuporteChamadoController::class, 'mudarPrioridade'])
+    
+    Route::patch('/chamados/{chamado}/mudar-prioridade', [SuporteChamadoController::class, 'mudarPrioridade'])
     ->name('chamados.mudarPrioridade');
 
     Route::patch('/chamados/{chamado}/salvar-solucao', [SuporteChamadoController::class, 'salvarSolucao'])
-                 ->name('chamados.salvarSolucao'); 
+                 ->name('chamados.salvarSolucao');
+                 
+    Route::patch('/chamados/{chamado}/reatribuir', [SuporteChamadoController::class, 'reatribuir'])
+                 ->name('chamados.reatribuir'); 
 });
 
 

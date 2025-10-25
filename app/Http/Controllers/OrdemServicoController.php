@@ -98,7 +98,7 @@ class OrdemServicoController extends Controller
                                                   ->orderBy('descricao')
                                                   ->get();
 
-        $ordemServico->load(['produtos.produto', 'servicos.servico', 'servicos.tecnico']);
+        $ordemServico->load(['produtos.produto', 'servicos.servico', 'servicos.tecnico','chamadoDeOrigem']);
     
         return view('ordens_servico.edit', compact(
             'ordemServico', 'clientes', 'tecnicos', 'pecas', 'servicos', 'equipamentosDoCliente'
