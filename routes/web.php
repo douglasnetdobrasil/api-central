@@ -124,6 +124,11 @@ Route::middleware('auth')->group(function () {
         Route::resource('empresa', EmpresaController::class)->except(['show']);
     });
 
+    // =====================================================================
+// ||||||||||||||| BLOCO DO PORTAL MOVIDO PARA O LUGAR CORRETO ||||||||||||||||
+// =====================================================================
+//portal do cliente 
+
     // API
     Route::get('/api/clientes/search', [ClienteController::class, 'search'])->name('api.clientes.search');
 
