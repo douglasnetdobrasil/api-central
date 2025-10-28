@@ -65,6 +65,12 @@ class OrdemServico extends Model
         static::addGlobalScope(new EmpresaScope);
     }
 
+    public function clienteEquipamento() 
+    {
+        // O nome da chave estrangeira ('cliente_equipamento_id') já segue o padrão do Laravel
+        return $this->belongsTo(ClienteEquipamento::class); 
+    }
+
     // --- RELACIONAMENTOS ---
 
     public function empresa(): BelongsTo { return $this->belongsTo(Empresa::class); }

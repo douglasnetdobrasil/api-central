@@ -371,6 +371,37 @@ class SuporteChamadoController extends Controller
                          ->with('success', 'Novo chamado aberto com sucesso!');
     }
 
+    public function equipamentosPorCliente(Request $request)
+    {
+        // 1. Usa o método input() para obter o ID de forma segura
+        $clienteId = $request->input('cliente_id');
+        
+        // 2. Verifica se o cliente ID é válido ou retorna array vazio
+        if (empty($clienteId) || !Cliente::where('id', $clienteId)->exists()) {
+             // Retorna um array vazio se o cliente não for encontrado ou não for enviado
+             return response()->json([]);
+        }
+
+        // 3. Busca os equipamentos vinculados ao cliente
+        $equipamentos = ClienteEquipamento::where('cliente_id', $clienteId)
+            ->select('id', 'descricao', 'numero_serie')
+            ->get();
+        
+        // 4. Formata e retorna o JSON
+        $response = $equipamentos->map(function ($equipamento) {
+            $texto = $equipamento->descricao;
+            if ($equipamento->numero_serie) {
+                $texto .= ' (SN: ' . $equipamento->numero_serie . ')';
+            }
+            return [
+                'id' => $equipamento->id,
+                'texto' => $texto
+            ];
+        });
+
+        return response()->json($response);
+    }
+
     public function converterOS(SuporteChamado $chamado)
     {
          // REGRA DE NEGÓCIO: BLOQUEAR CONVERSÃO SE FINALIZADO

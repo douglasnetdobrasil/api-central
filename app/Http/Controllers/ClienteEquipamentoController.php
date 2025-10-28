@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\ClienteEquipamento;
 use App\Models\Cliente;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class ClienteEquipamentoController extends Controller
 {
@@ -51,6 +53,49 @@ class ClienteEquipamentoController extends Controller
         $clientes = Cliente::orderBy('nome')->get();
         return view('cliente_equipamentos.edit', compact('clienteEquipamento', 'clientes'));
     }
+
+    public function storeModal(Request $request)
+    {
+        // 1. Determina a origem e o Cliente ID
+        $isAdmin = $request->routeIs('admin.*'); // Verifica se a rota atual pertence ao grupo 'admin.'
+        
+        // Se for Admin, o cliente_id vem no Request. Se for Portal, pegamos do usuário logado.
+        $clienteId = $isAdmin ? $request->cliente_id : Auth::user()->cliente_id;
+        
+       // 2. Validação Específica para o Modal (SIMPLIFICADA PARA DEBUG)
+       $validated = $request->validate([
+        'descricao' => 'required|string|max:255',
+        'numero_serie' => [
+            'nullable', 
+            'string', 
+            'max:100',
+            // Removida a regra Rule::unique temporariamente para isolar o erro
+        ],
+        'marca' => 'nullable|string|max:50',
+        'modelo' => 'nullable|string|max:50',
+        // Esta regra é crucial para o Admin
+        'cliente_id' => Rule::requiredIf($isAdmin) . '|exists:clientes,id', 
+    ]);
+
+        // 3. Criação do Equipamento
+        $equipamento = ClienteEquipamento::create([
+            'cliente_id' => $clienteId, 
+            'empresa_id' => Auth::user()->empresa_id, // Pega a empresa do usuário logado (Admin ou Cliente)
+            'descricao' => $validated['descricao'],
+            'numero_serie' => $validated['numero_serie'] ?? null,
+            'marca' => $validated['marca'] ?? null,
+            'modelo' => $validated['modelo'] ?? null,
+        ]);
+        
+        // 4. Retorno JSON (para o AJAX)
+        $descricaoCompleta = $equipamento->descricao . ($equipamento->numero_serie ? ' (SN: ' . $equipamento->numero_serie . ')' : '');
+
+        return response()->json([
+            'id' => $equipamento->id,
+            'texto' => $descricaoCompleta, // Retorna o formato que o <select> espera
+        ]);
+    }
+
 
     public function update(Request $request, ClienteEquipamento $clienteEquipamento)
     {

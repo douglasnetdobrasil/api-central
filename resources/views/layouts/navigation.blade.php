@@ -358,9 +358,21 @@
                         {{ __('Relatórios de Estoque') }}
                     </x-dropdown-link>
                 @endcan
+                
+                
                 @can('ver-relatorio-compras')
                     <x-dropdown-link :href="route('relatorios.compras.index')">
                         {{ __('Relatórios de Compras') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-relatorio-compras')
+                    <x-dropdown-link :href="route('relatorios.suporte.dashboard')">
+                        {{ __('Relatórios de Chamados(BI)') }}
+                    </x-dropdown-link>
+                @endcan
+                @can('ver-relatorio-compras')
+                    <x-dropdown-link :href="route('admin.relatorios.os.dashboard')">
+                        {{ __('Relatórios de Os(BI)') }}
                     </x-dropdown-link>
                 @endcan
             </x-slot>

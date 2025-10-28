@@ -52,18 +52,19 @@ use App\Livewire\NfeRascunhos;
 use App\Models\Venda;
 use App\Livewire\NfeAvulsaFormulario;
 use App\Livewire\NfeAvulsaCriar;
+use App\Http\Controllers\Admin\RelatorioSuporteController;
+use App\Http\Controllers\Admin\RelatorioOSController;
 
 // (Dependendo da sua versão do Laravel, você pode precisar de 'use App\Http\Controllers\CentroCustoRelatorioController;')
-// Assumindo que ele existe ou está em outro namespace.
+
 
 Route::get('/', function () {
     return view('welcome');
 });
 
 // =====================================================================
-// ||||||||||||||| BLOCO DO PORTAL MOVIDO PARA O LUGAR CORRETO ||||||||||||||||
+// ||||||||||||||| BLOCO DO PORTAL DO CLIENTE ||||||||||||||||
 // =====================================================================
-//portal do cliente 
 Route::prefix('portal')->name('portal.')->group(function () {
 
     // Rotas de login/logout do CLIENTE (Acessíveis como 'guest')
@@ -81,12 +82,14 @@ Route::prefix('portal')->name('portal.')->group(function () {
         Route::post('/chamados', [PortalClienteController::class, 'store'])->name('chamados.store');
         Route::get('/chamados/{chamado}', [PortalClienteController::class, 'show'])->name('chamados.show');
         Route::post('/chamados/{chamado}/responder', [PortalClienteController::class, 'responder'])->name('chamados.responder');
-    });Route::post('/equipamentos/store-modal', [PortalClienteController::class, 'storeEquipamentoModal'])
-    ->name('equipamentos.storeModal');
-
-   
+        
+        // Rotas do Portal para Equipamentos (Incluindo o modal)
+        Route::post('/equipamentos/store-modal', [PortalClienteController::class, 'storeEquipamentoModal'])
+            ->name('equipamentos.storeModal');
+           
+    });
 });
-// =================== FIM DO BLOCO MOVIDO ===================
+// =================== FIM DO BLOCO PORTAL ===================
 
 
 Route::get('/dashboard', function () {
@@ -123,11 +126,6 @@ Route::middleware('auth')->group(function () {
         Route::resource('usuarios', UserController::class);
         Route::resource('empresa', EmpresaController::class)->except(['show']);
     });
-
-    // =====================================================================
-// ||||||||||||||| BLOCO DO PORTAL MOVIDO PARA O LUGAR CORRETO ||||||||||||||||
-// =====================================================================
-//portal do cliente 
 
     // API
     Route::get('/api/clientes/search', [ClienteController::class, 'search'])->name('api.clientes.search');
@@ -177,10 +175,11 @@ Route::get('/ordens-servico/{ordemServico}/imprimir', [OrdemServicoController::c
 // Rotas para adicionar/remover SERVIÇOS da OS
 Route::post('/ordens-servico/{ordemServico}/servicos', [OrdemServicoController::class, 'storeServico'])->name('os.servicos.store');
 Route::delete('/os-servicos/{osServico}', [OrdemServicoController::class, 'destroyServico'])->name('os.servicos.destroy');
+
     // Utilitários
     Route::get('/consulta/cnpj/{cnpj}', [UtilController::class, 'consultarCnpj'])->name('consulta.cnpj');
     
-    // Admin
+    // Admin (Configurações e Fiscal)
     Route::prefix('admin')->name('admin.')->middleware(['can:acessar-admin'])->group(function () {
         Route::resource('perfis-fiscais', PerfilFiscalController::class);
         Route::get('configuracoes', [ConfiguracaoController::class, 'index'])->name('configuracoes.index');
@@ -198,6 +197,28 @@ Route::delete('/os-servicos/{osServico}', [OrdemServicoController::class, 'destr
     Route::get('/relatorios/estoque', [RelatorioEstoqueController::class, 'index'])->name('relatorios.estoque.index');
     Route::get('/relatorios/estoque/movimentacoes/{produto}', [RelatorioEstoqueController::class, 'movimentacoes'])->name('relatorios.estoque.movimentacoes');
     Route::get('/relatorios/compras', [RelatorioComprasController::class, 'index'])->name('relatorios.compras.index');
+    Route::get('/admin/relatorios/suporte', [RelatorioSuporteController::class, 'dashboard'])
+    ->middleware('can:acessar-admin') // Garante que só supervisor acesse
+    ->name('relatorios.suporte.dashboard');
+   // ROTA PRINCIPAL: /admin/relatorios/suporte (URL) -> admin.relatorios.suporte.dashboard (NOME)
+Route::get('/relatorios/suporte/dashboard', [RelatorioSuporteController::class, 'dashboard'])
+->name('admin.relatorios.suporte.dashboard') // <--- CORRIGIDO: Nome completo esperado pelo formulário
+->middleware('can:acessar-admin'); 
+
+// ROTA DETALHE:
+Route::get('/relatorios/suporte/detalhe', [RelatorioSuporteController::class, 'detalhe'])
+->name('admin.relatorios.suporte.detalhe')
+->middleware('can:acessar-admin');
+
+Route::get('/relatorios/os/dashboard', [RelatorioOsController::class, 'dashboard'])
+    ->name('admin.relatorios.os.dashboard') // Nome com prefixo admin.
+    ->middleware('can:acessar-admin'); 
+    
+Route::get('/relatorios/os/detalhe', [RelatorioOsController::class, 'detalhe'])
+    ->name('admin.relatorios.os.detalhe')
+    ->middleware('can:acessar-admin');
+
+
 
     // --- MÓDULO DE INVENTÁRIO ---
     Route::prefix('inventarios')->name('inventarios.')->group(function () {
@@ -212,82 +233,69 @@ Route::delete('/os-servicos/{osServico}', [OrdemServicoController::class, 'destr
         Route::post('/{inventario}/marcar-contado', [InventarioController::class, 'marcarComoContado'])->name('marcarContado');
     });
 
-    // =====================================================================
-    // ||||||||||||||||||||| ROTAS MOVIDAS PARA AQUI |||||||||||||||||||||||
-    // =====================================================================
-    // --- MÓDULO DE PRODUÇÃO (FICHA TÉCNICA) ---
+    // --- MÓDULO DE PRODUÇÃO ---
     Route::post('ficha-tecnica/{produto}/store-item', [FichaTecnicaController::class, 'storeItem'])->name('ficha-tecnica.storeItem');
     Route::resource('ficha-tecnica', FichaTecnicaController::class)->except(['show']);
    
-    
-  // --- MÓDULO DE PRODUÇÃO (ORDEM DE PRODUÇÃO) ---
-Route::post('ordem-producao/{ordemProducao}/iniciar', [App\Http\Controllers\OrdemProducaoController::class, 'iniciarProducao'])->name('ordem-producao.iniciar');
-Route::post('ordem-producao/{ordemProducao}/finalizar', [App\Http\Controllers\OrdemProducaoController::class, 'finalizarProducao'])->name('ordem-producao.finalizar'); // <-- ADICIONE ESTA LINHA
-Route::resource('ordem-producao', App\Http\Controllers\OrdemProducaoController::class)->except(['edit', 'update']);
-Route::get('/producao', App\Http\Controllers\ProducaoDashboardController::class)->name('producao.dashboard');   
+    // ORDEM DE PRODUÇÃO
+    Route::post('ordem-producao/{ordemProducao}/iniciar', [App\Http\Controllers\OrdemProducaoController::class, 'iniciarProducao'])->name('ordem-producao.iniciar');
+    Route::post('ordem-producao/{ordemProducao}/finalizar', [App\Http\Controllers\OrdemProducaoController::class, 'finalizarProducao'])->name('ordem-producao.finalizar');
+    Route::resource('ordem-producao', App\Http\Controllers\OrdemProducaoController::class)->except(['edit', 'update']);
+    Route::get('/producao', App\Http\Controllers\ProducaoDashboardController::class)->name('producao.dashboard');   
    
     // FISCAL
     Route::get('/fiscal', [ContingenciaController::class, 'index'])->name('fiscal.index');
-
-
     
-    //CENTRO DE CUSTO 
+    // CENTRO DE CUSTO 
     Route::resource('centros-custo', CentroCustoController::class)->middleware('auth');
 
-
-    /* * O seu código original tinha um erro aqui, com um 'use' e rotas de 'CentroCustoRelatorioController'
-    * que não estava sendo importado no topo. Você precisará verificar isso.
-    * Vou comentar essa parte para evitar um erro de "Classe não encontrada".
-    */
-    /*
-    Route::prefix('relatorios')->name('relatorios.')->middleware('auth')->group(function () {
-        Route::get('centros-custo/extrato', [CentroCustoRelatorioController::class, 'extratoForm'])->name('centros-custo.extratoForm');
-        Route::post('centros-custo/extrato', [CentroCustoRelatorioController::class, 'gerarExtrato'])->name('centros-custo.gerarExtrato');
-        
-        Route::get('centros-custo/fluxo-caixa', [CentroCustoRelatorioController::class, 'fluxoCaixaForm'])->name('centros-custo.fluxoCaixaForm');
-        Route::post('centros-custo/fluxo-caixa', [CentroCustoRelatorioController::class, 'gerarFluxoCaixa'])->name('centros-custo.gerarFluxoCaixa');
-        Route::resource('centros-custo', CentroCustoController::class)->except(['show']);
-
-    });
-    */
-
-    // O BLOCO DO PORTAL DO CLIENTE FOI REMOVIDO DAQUI
+    // ... (Bloco de CentroCustoRelatorioController comentado) ...
   
-// --- GESTÃO DE CHAMADOS (PAINEL INTERNO) ---
-// (Este está no lugar correto, pois é para o Admin)
-Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
-    
-    // Rotas de criação e salvamento (ADICIONADAS/RESTAURADAS AQUI)
-    Route::get('/chamados/novo', [SuporteChamadoController::class, 'create'])->name('chamados.create');
-    Route::post('/chamados', [SuporteChamadoController::class, 'store'])->name('chamados.store');
+    // =====================================================================
+    // ||||||||||||||||| GESTÃO DE CHAMADOS (PAINEL INTERNO) - CORRIGIDO ||||||||||||||||
+    // =====================================================================
+    Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+        
+        // 1. ROTAS AJAX (PRIORIDADE MÁXIMA PARA EVITAR CONFLITO COM {chamado})
+        Route::get('chamados/equipamentosPorCliente', [SuporteChamadoController::class, 'equipamentosPorCliente'])
+            ->name('chamados.equipamentosPorCliente'); 
 
-    // Rotas de listagem e atendimento
-    Route::get('/chamados', [SuporteChamadoController::class, 'index'])->name('chamados.index');
-    Route::get('/chamados/{chamado}', [SuporteChamadoController::class, 'show'])->name('chamados.show');
-    Route::post('/chamados/{chamado}/responder', [SuporteChamadoController::class, 'responder'])->name('chamados.responder');
-    Route::post('/chamados/{chamado}/atribuir', [SuporteChamadoController::class, 'atribuir'])->name('chamados.atribuir');
-    
-    // Rotas de Ação
-    Route::post('/chamados/{chamado}/converter-os', [SuporteChamadoController::class, 'converterOS'])->name('chamados.converterOS');
+        Route::post('equipamentos/storeModal', [ClienteEquipamentoController::class, 'storeModal']) 
+            ->name('equipamentos.storeModal');
+        
+        // 2. ROTAS CRUD COM NOME ESPECÍFICO (PRIORIDADE ALTA)
+        Route::get('/chamados/novo', [SuporteChamadoController::class, 'create'])->name('chamados.create');
+        Route::post('/chamados', [SuporteChamadoController::class, 'store'])->name('chamados.store');
+        Route::get('/chamados', [SuporteChamadoController::class, 'index'])->name('chamados.index');
 
-    Route::patch('/chamados/{chamado}/mudar-status', [SuporteChamadoController::class, 'mudarStatus'])
-    ->name('chamados.mudarStatus');
-    
-    Route::patch('/chamados/{chamado}/mudar-prioridade', [SuporteChamadoController::class, 'mudarPrioridade'])
-    ->name('chamados.mudarPrioridade');
+        // 3. ROTAS DE AÇÃO E {chamado} (PRIORIDADE BAIXA)
+        Route::post('/chamados/{chamado}/converter-os', [SuporteChamadoController::class, 'converterOS'])->name('chamados.converterOS');
+        Route::post('/chamados/{chamado}/responder', [SuporteChamadoController::class, 'responder'])->name('chamados.responder');
+        Route::post('/chamados/{chamado}/atribuir', [SuporteChamadoController::class, 'atribuir'])->name('chamados.atribuir');
 
-    Route::patch('/chamados/{chamado}/salvar-solucao', [SuporteChamadoController::class, 'salvarSolucao'])
-                 ->name('chamados.salvarSolucao');
-                 
-    Route::patch('/chamados/{chamado}/reatribuir', [SuporteChamadoController::class, 'reatribuir'])
-                 ->name('chamados.reatribuir'); 
-});
+        Route::patch('/chamados/{chamado}/mudar-status', [SuporteChamadoController::class, 'mudarStatus'])
+        ->name('chamados.mudarStatus');
+        
+        Route::patch('/chamados/{chamado}/mudar-prioridade', [SuporteChamadoController::class, 'mudarPrioridade'])
+        ->name('chamados.mudarPrioridade');
 
+        Route::patch('/chamados/{chamado}/salvar-solucao', [SuporteChamadoController::class, 'salvarSolucao'])
+                     ->name('chamados.salvarSolucao');
+                     
+        Route::patch('/chamados/{chamado}/reatribuir', [SuporteChamadoController::class, 'reatribuir'])
+                     ->name('chamados.reatribuir'); 
+                     
+        // ROTA SHOW - DEVE SER A ÚLTIMA A USAR O PARÂMETRO {chamado}
+        Route::get('/chamados/{chamado}', [SuporteChamadoController::class, 'show'])->name('chamados.show');
+    });
 
+    // --- ROTAS DA OS QUE TAMBÉM PODEM CAUSAR CONFLITO ---
     Route::get('/os/clientes/{clienteId}/equipamentos', [App\Http\Controllers\OrdemServicoController::class, 'getEquipamentosByCliente'])->name('os.equipamentos.by.cliente');
     Route::post('/os/equipamentos/store-modal', [OrdemServicoController::class, 'storeEquipamentoModal'])
          ->name('os.equipamentos.storeModal');
     
+    // ... (o restante das suas rotas de teste e fiscal) ...
+
     Route::get('/teste-status-sefaz', function () {
         if (!Auth::check()) {
             return 'Você precisa estar logado para fazer este teste.';
@@ -315,17 +323,11 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
             $std = new \NFePHP\NFe\Common\Standardize($response);
             dd($std->toStd());
     
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             dd($e->getMessage());
         }
     });
 
-    /*
-    Route::get('/fiscal/contingencia', ContingenciaMonitor::class)
-    ->middleware('auth')
-    ->name('fiscal.contingencia.index');
-    */
-    
     Route::get('/fiscal', [ContingenciaController::class, 'index'])
     ->middleware('auth')
     ->name('fiscal.index');
