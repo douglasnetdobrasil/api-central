@@ -28,9 +28,69 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <a href="{{ route('ordens-servico.show', $os) }}" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900">Detalhes</a>
-                        <a href="{{ route('ordens-servico.edit', $os) }}" class="ml-4 text-gray-600 dark:text-gray-400 hover:text-gray-900">Editar</a>
-                    </td>
+    {{-- INÍCIO DO DROP DOWN DE AÇÕES --}}
+    <div x-data="{ open: false }" @click.away="open = false" class="relative inline-block text-left">
+        
+        {{-- BOTÃO PRINCIPAL (Toggle) --}}
+        <button @click="open = !open" type="button" class="inline-flex justify-center w-full rounded-md border border-gray-300 dark:border-gray-700 shadow-sm px-3 py-2 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Ações
+            {{-- Ícone da seta --}}
+            <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+        </button>
+
+        {{-- PAINEL DO DROP DOWN --}}
+        <div x-show="open" 
+             x-transition:enter="transition ease-out duration-100" 
+             x-transition:enter-start="transform opacity-0 scale-95" 
+             x-transition:enter-end="transform opacity-100 scale-100" 
+             x-transition:leave="transition ease-in duration-75" 
+             x-transition:leave-start="transform opacity-100 scale-100" 
+             x-transition:leave-end="transform opacity-0 scale-95" 
+             class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-10" 
+             style="display: none;" 
+             role="menu" aria-orientation="vertical" aria-labelledby="menu-button">
+            
+            <div class="py-1" role="none">
+                
+                {{-- 1. Opção: Editar --}}
+                <a href="{{ route('ordens-servico.edit', $os) }}" class="text-gray-700 dark:text-gray-300 block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">
+                    <i class="fas fa-edit mr-2"></i> Editar OS
+                </a>
+                
+                {{-- 2. Opção: Imprimir --}}
+                <a href="{{ route('ordens-servico.imprimir', $os) }}" target="_blank" class="text-gray-700 dark:text-gray-300 block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">
+                    <i class="fas fa-print mr-2"></i> Imprimir OS
+                </a>
+                
+                {{-- Separador Condicional --}}
+                @if ($os->status === 'Concluida' || $os->venda_id)
+                    <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                @endif
+                
+                {{-- 3. Opção Condicional: FATURAR RÁPIDO (Aparece se CONCLUÍDA e NÃO FATURADA) --}}
+                @if ($os->status === 'Concluida' && $os->venda_id === null)
+                    <button wire:click="faturarRapido({{ $os->id }})" 
+                            onclick="confirm('Confirma faturamento rápido (Venda à vista, hoje) da OS #{{ $os->id }}?') || event.stopImmediatePropagation()"
+                            class="text-green-600 dark:text-green-400 block w-full text-left px-4 py-2 text-sm hover:bg-green-50 dark:hover:bg-green-900" 
+                            role="menuitem">
+                        <i class="fas fa-file-invoice-dollar mr-2"></i> Faturar Rápido
+                    </button>
+                @elseif ($os->venda_id)
+                    {{-- 4. Opção Condicional: VER VENDA (Aparece se JÁ FATURADA) --}}
+                    <a href="{{ route('vendas.show', $os->venda_id) }}" 
+                       class="text-blue-600 dark:text-blue-400 block px-4 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900"
+                       role="menuitem">
+                        <i class="fas fa-receipt mr-2"></i> Ver Venda #{{ $os->venda_id }}
+                    </a>
+                @endif
+                
+            </div>
+        </div>
+    </div>
+    {{-- FIM DO DROP DOWN DE AÇÕES --}}
+</td>
                 </tr>
             @empty
                 <tr>
