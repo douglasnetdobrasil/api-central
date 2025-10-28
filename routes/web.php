@@ -59,7 +59,8 @@ use App\Http\Controllers\Admin\RelatorioOSController;
 
 
 Route::get('/', function () {
-    return view('welcome');
+    // Altere 'return view('welcome');' para 'return redirect()->route('login');'
+    return redirect()->route('login'); 
 });
 
 // =====================================================================
