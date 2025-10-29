@@ -37,6 +37,7 @@ use App\Http\Controllers\CentroCustoController;
 use App\Http\Controllers\PortalClienteController;
 use App\Http\Controllers\Admin\SuporteChamadoController;
 use App\Http\Controllers\Auth\ClienteLoginController;
+use App\Http\Controllers\Financeiro\CobrancaController;
 
 
 use App\Services\NFCeService;
@@ -54,6 +55,7 @@ use App\Livewire\NfeAvulsaFormulario;
 use App\Livewire\NfeAvulsaCriar;
 use App\Http\Controllers\Admin\RelatorioSuporteController;
 use App\Http\Controllers\Admin\RelatorioOSController;
+use App\Livewire\Financeiro\CentralFaturamento;
 
 // (Dependendo da sua versão do Laravel, você pode precisar de 'use App\Http\Controllers\CentroCustoRelatorioController;')
 
@@ -288,6 +290,20 @@ Route::get('/relatorios/os/detalhe', [RelatorioOsController::class, 'detalhe'])
                      
         // ROTA SHOW - DEVE SER A ÚLTIMA A USAR O PARÂMETRO {chamado}
         Route::get('/chamados/{chamado}', [SuporteChamadoController::class, 'show'])->name('chamados.show');
+    });
+
+
+//MODULO CENTRAL FINANCEIRA
+    Route::get('/financeiro/central-faturamento', CentralFaturamento::class)
+     ->name('financeiro.central-faturamento');
+
+
+     Route::prefix('financeiro/cobrancas')->name('financeiro.cobrancas.')->group(function () {
+        Route::get('/', [CobrancaController::class, 'index'])->name('index');
+        Route::get('/{conta}/pdf', [CobrancaController::class, 'gerarPdfFatura'])->name('pdf');
+        Route::post('/{conta}/registrar-pagamento', [CobrancaController::class, 'registrarRecebimento'])->name('registrar-pagamento');
+        Route::post('/{conta}/enviar-email', [CobrancaController::class, 'enviarEmailCobranca'])->name('enviar-email');
+        // Adicionar rotas para 'show', 'gerarBoleto', etc., conforme necessário
     });
 
     // --- ROTAS DA OS QUE TAMBÉM PODEM CAUSAR CONFLITO ---

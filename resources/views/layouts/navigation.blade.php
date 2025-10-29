@@ -231,9 +231,24 @@
                         {{ __('Conciliacao Bancaria') }}
                     </x-dropdown-link>
                 @endcan
+               
+                @can('ver-centro-custo')
+                    <x-dropdown-link :href="route('financeiro.central-faturamento')">
+                        {{ __('Central de Faturamento') }}
+                    </x-dropdown-link>
+                @endcan
+
+                
+
                 @can('ver-centro-custo')
                     <x-dropdown-link :href="route('categorias.index')">
                         {{ __('Centro de custo') }}
+                    </x-dropdown-link>
+                @endcan
+
+                @can('ver-centro-custo')
+                    <x-dropdown-link :href="route('financeiro.cobrancas.index')">
+                        {{ __('Central de Cobranca') }}
                     </x-dropdown-link>
                 @endcan
                 @can('ver-usuarios')

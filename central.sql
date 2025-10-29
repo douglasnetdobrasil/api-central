@@ -228,7 +228,7 @@ CREATE TABLE `cliente_equipamentos` (
   KEY `cliente_equipamentos_cliente_id_foreign` (`cliente_id`),
   CONSTRAINT `cliente_equipamentos_cliente_id_foreign` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON DELETE CASCADE,
   CONSTRAINT `cliente_equipamentos_empresa_id_foreign` FOREIGN KEY (`empresa_id`) REFERENCES `empresas` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1260,7 +1260,7 @@ CREATE TABLE `ordens_servico` (
   CONSTRAINT `ordens_servico_suporte_chamado_id_foreign` FOREIGN KEY (`suporte_chamado_id`) REFERENCES `suporte_chamados` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `ordens_servico_tecnico_id_foreign` FOREIGN KEY (`tecnico_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `ordens_servico_venda_id_foreign` FOREIGN KEY (`venda_id`) REFERENCES `vendas` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1301,7 +1301,7 @@ CREATE TABLE `os_historico` (
   KEY `os_historico_user_id_foreign` (`user_id`),
   CONSTRAINT `os_historico_ordem_servico_id_foreign` FOREIGN KEY (`ordem_servico_id`) REFERENCES `ordens_servico` (`id`) ON DELETE CASCADE,
   CONSTRAINT `os_historico_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1714,7 +1714,7 @@ CREATE TABLE `suporte_chamado_mensagens` (
   CONSTRAINT `suporte_chamado_mensagens_chamado_id_foreign` FOREIGN KEY (`chamado_id`) REFERENCES `suporte_chamados` (`id`) ON DELETE CASCADE,
   CONSTRAINT `suporte_chamado_mensagens_cliente_id_foreign` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `suporte_chamado_mensagens_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1753,7 +1753,7 @@ CREATE TABLE `suporte_chamados` (
   CONSTRAINT `suporte_chamados_empresa_id_foreign` FOREIGN KEY (`empresa_id`) REFERENCES `empresas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `suporte_chamados_ordem_servico_id_foreign` FOREIGN KEY (`ordem_servico_id`) REFERENCES `ordens_servico` (`id`) ON DELETE SET NULL,
   CONSTRAINT `suporte_chamados_tecnico_atribuido_id_foreign` FOREIGN KEY (`tecnico_atribuido_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1980,4 +1980,4 @@ CREATE TABLE `vendas` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-25 10:56:18
+-- Dump completed on 2025-10-29 14:31:36
